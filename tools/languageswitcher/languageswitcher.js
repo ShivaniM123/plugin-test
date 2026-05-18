@@ -15,6 +15,12 @@ import {
   DEFAULT_SHEET,
   detectLocaleColumnKeys,
 } from './placeholders.js';
+import {
+  setAemToken,
+  buildAemAdminPath,
+  previewPages,
+  publishPages,
+} from './aem-admin.js';
 
 const PRIMARY_LABEL_WITH_PICKER = 'Open page for selected language';
 let resolvedDaPageUrl = '';
@@ -52,6 +58,8 @@ function getUi() {
     langValue: document.getElementById('langSelectValue'),
     openBtn: document.getElementById('open'),
     openAllBtn: document.getElementById('openAll'),
+    previewAllBtn: document.getElementById('previewAll'),
+    publishAllBtn: document.getElementById('publishAll'),
   };
 }
 
@@ -95,6 +103,8 @@ function scheduleCloseLibrary(actions) {
 function setUi(ui, status, previewUrl, canOpen, actions, opts = {}) {
   const showLangRow = opts.showLangRow === true;
   const showOpenAll = opts.showOpenAll === true;
+  const showPreviewAll = opts.showPreviewAll === true;
+  const showPublishAll = opts.showPublishAll === true;
   const sourceUrlText = displayUrl(opts.sourceUrl) || displayUrl(resolvedDaPageUrl);
 
   ui.statusEl.textContent = status;
@@ -117,7 +127,7 @@ function setUi(ui, status, previewUrl, canOpen, actions, opts = {}) {
     ui.previewEl.textContent = '';
   }
 
-  ui.actionsEl.hidden = !(canOpen || showOpenAll);
+  ui.actionsEl.hidden = !(canOpen || showOpenAll || showPreviewAll || showPublishAll);
   ui.openBtn.hidden = !canOpen;
   ui.openBtn.disabled = !canOpen || opts.openDisabled === true;
   ui.openBtn.textContent =
@@ -134,6 +144,20 @@ function setUi(ui, status, previewUrl, canOpen, actions, opts = {}) {
   ui.openAllBtn.disabled = false;
   ui.openAllBtn.onclick =
     showOpenAll && typeof opts.openAllClick === 'function' ? opts.openAllClick : null;
+
+  if (ui.previewAllBtn) {
+    ui.previewAllBtn.hidden = !showPreviewAll;
+    ui.previewAllBtn.disabled = opts.bulkDisabled === true;
+    ui.previewAllBtn.onclick =
+      showPreviewAll && typeof opts.previewAllClick === 'function' ? opts.previewAllClick : null;
+  }
+
+  if (ui.publishAllBtn) {
+    ui.publishAllBtn.hidden = !showPublishAll;
+    ui.publishAllBtn.disabled = opts.bulkDisabled === true;
+    ui.publishAllBtn.onclick =
+      showPublishAll && typeof opts.publishAllClick === 'function' ? opts.publishAllClick : null;
+  }
 }
 
 function setPanelTwoLanguagesMode(isTwo) {
@@ -347,10 +371,15 @@ function resolveSitePath(contextPath, org, repo, segments) {
   return p;
 }
 
+function countAemSuccess(pages) {
+  return pages.filter((p) => p.status === 200).length;
+}
+
 async function main() {
-  const { context, actions } = await DA_SDK;
+  const { context, actions, token } = await DA_SDK;
   const ui = getUi();
   setPanelTwoLanguagesMode(false);
+  if (token) setAemToken(token);
 
   const pageUrl = contextToDaUrl({
     org: context.org,
@@ -440,40 +469,14 @@ async function main() {
   const urlSeg = segments[locIndex];
   const afterLoc = pathAfterLocale(segments.slice(locIndex));
   const showLangPicker = langKeys.length >= 3;
-
-  if (langKeys.length === 1) {
-    ui.langRow.hidden = true;
-    const [only] = langKeys;
-    if (urlSeg.toLowerCase() === only.toLowerCase()) {
-      show(
-        `Already on ${only}. Add another language column to map paths, or open a page in a different locale folder.`,
-        null,
-        false,
-      );
-      return;
-    }
-    const newSeg = [...segments.slice(0, locIndex), only, ...segments.slice(locIndex + 1)];
-    show('', buildDest(parsed, org, repo, newSeg, useBranch, tier, target, daView), true, {
-      showLangRow: false,
-      openPrimaryLabel: `Open page in ${only}`,
-    });
-    return;
-  }
-
   const fromLoc = canonLocale(urlSeg, langKeys);
-  if (!fromLoc) {
-    show(
-      `This page’s locale folder is "${urlSeg}" but placeholders only define: ${langKeys.join(', ')}.`,
-      null,
-      false,
-    );
-    return;
-  }
 
   const pathCache = new Map();
   const getResolvedPath = (toLoc) => {
     const k = toLoc.toLowerCase();
-    if (!pathCache.has(k)) pathCache.set(k, resolvePathWithFallback(rows, fromLoc, toLoc, afterLoc));
+    if (!pathCache.has(k)) {
+      pathCache.set(k, resolvePathWithFallback(rows, fromLoc, toLoc, afterLoc));
+    }
     return pathCache.get(k);
   };
 
@@ -488,16 +491,103 @@ async function main() {
     daView,
   );
 
-  const openAllOpts = () => ({
-    showOpenAll: langKeys.length > 2,
-    openAllClick: () => {
-      const urls = langKeys
-        .filter((to) => to.toLowerCase() !== fromLoc.toLowerCase())
-        .map(urlForLocale);
-      openUrlsInNewTabs(urls);
-      if (urls.length) scheduleCloseLibrary(actions);
-    },
-  });
+  const segmentsForLocale = (toLoc) => mergeResolvedSegments(
+    locIndex,
+    segments,
+    getResolvedPath(toLoc),
+  );
+
+  const otherLocales = () => {
+    if (!fromLoc) return [...langKeys];
+    return langKeys.filter((to) => to.toLowerCase() !== fromLoc.toLowerCase());
+  };
+
+  const bulkOpts = () => {
+    const targets = otherLocales();
+    return {
+      showOpenAll: langKeys.length > 2,
+      showPreviewAll: true,
+      showPublishAll: true,
+      openAllClick: () => {
+        const urls = targets.map(urlForLocale);
+        openUrlsInNewTabs(urls);
+        if (urls.length) scheduleCloseLibrary(actions);
+      },
+      previewAllClick: async () => {
+        if (!token) {
+          show('Preview requires DA authentication (token missing).', null, true, bulkOpts());
+          return;
+        }
+        if (!targets.length) {
+          show('No other languages to preview.', null, true, bulkOpts());
+          return;
+        }
+        const pages = targets.map((loc) => ({
+          path: buildAemAdminPath(org, repo, segmentsForLocale(loc)),
+        }));
+        show('Previewing…', null, true, { ...bulkOpts(), bulkDisabled: true });
+        try {
+          const result = await previewPages(pages);
+          const ok = countAemSuccess(result);
+          show(`${ok} of ${pages.length} page(s) previewed.`, null, true, bulkOpts());
+        } catch (e) {
+          show(`Preview failed: ${e.message || String(e)}`, null, true, bulkOpts());
+        }
+      },
+      publishAllClick: async () => {
+        if (!token) {
+          show('Publishing requires DA authentication (token missing).', null, true, bulkOpts());
+          return;
+        }
+        if (!targets.length) {
+          show('No other languages to publish.', null, true, bulkOpts());
+          return;
+        }
+        const pages = targets.map((loc) => ({
+          path: buildAemAdminPath(org, repo, segmentsForLocale(loc)),
+        }));
+        show('Publishing…', null, true, { ...bulkOpts(), bulkDisabled: true });
+        try {
+          const result = await publishPages(pages);
+          const ok = countAemSuccess(result);
+          show(`${ok} of ${pages.length} page(s) published.`, null, true, bulkOpts());
+        } catch (e) {
+          show(`Publish failed: ${e.message || String(e)}`, null, true, bulkOpts());
+        }
+      },
+    };
+  };
+
+  if (langKeys.length === 1) {
+    ui.langRow.hidden = true;
+    const [only] = langKeys;
+    if (urlSeg.toLowerCase() === only.toLowerCase()) {
+      show(
+        `Already on ${only}. Add another language column to map paths, or open a page in a different locale folder.`,
+        null,
+        false,
+        bulkOpts(),
+      );
+      return;
+    }
+    const newSeg = [...segments.slice(0, locIndex), only, ...segments.slice(locIndex + 1)];
+    show('', buildDest(parsed, org, repo, newSeg, useBranch, tier, target, daView), true, {
+      showLangRow: false,
+      openPrimaryLabel: `Open page in ${only}`,
+      ...bulkOpts(),
+    });
+    return;
+  }
+
+  if (!fromLoc) {
+    show(
+      `This page’s locale folder is "${urlSeg}" but placeholders only define: ${langKeys.join(', ')}.`,
+      null,
+      false,
+      bulkOpts(),
+    );
+    return;
+  }
 
   const applyDestination = (toLoc) => {
     if (toLoc.toLowerCase() === fromLoc.toLowerCase()) {
@@ -505,7 +595,7 @@ async function main() {
         showLangRow: showLangPicker,
         openDisabled: true,
         openPrimaryLabel: PRIMARY_LABEL_WITH_PICKER,
-        ...openAllOpts(),
+        ...bulkOpts(),
       });
       return;
     }
@@ -514,7 +604,7 @@ async function main() {
       openPrimaryLabel: showLangPicker
         ? PRIMARY_LABEL_WITH_PICKER
         : `Open page in ${toLoc}`,
-      ...openAllOpts(),
+      ...bulkOpts(),
     });
   };
 
