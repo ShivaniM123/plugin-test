@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Language Navigator</title>
+    <link rel="icon" href="data:," />
+    <!-- Spectrum tokens (same as other da.live tools) -->
+    <link rel="stylesheet" href="https://da.live/nx/public/sl/styles.css" />
+    <!-- ./ so assets resolve on preview host / org/repo / tools / … -->
+    <link rel="stylesheet" href="./languageswitcher.css" />
+  </head>
+  <body>
+    <div class="ls-shell">
+      <div class="ls-panel" role="region" aria-label="Language Navigator">
+        <header class="app-header">
+          <div class="app-header-accent" aria-hidden="true"></div>
+          <div class="app-header-inner">
+            <h1 class="app-title">Language Navigator</h1>
+          </div>
+        </header>
+
+        <main class="app-main">
+          <p id="status" class="status">Loading…</p>
+
+          <section id="langRow" class="lang-card" hidden>
+            <span class="field-label" id="langSelectLabel">Other languages</span>
+            <div class="lang-combobox" id="langCombobox">
+              <button
+                type="button"
+                id="langSelectTrigger"
+                class="lang-select-trigger"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-controls="langSelectMenu"
+                aria-labelledby="langSelectLabel"
+              >
+                <span class="lang-select-value" id="langSelectValue"></span>
+              </button>
+              <div
+                id="langSelectMenu"
+                class="lang-select-menu"
+                role="listbox"
+                aria-labelledby="langSelectLabel"
+                aria-hidden="true"
+              ></div>
+            </div>
+          </section>
+
+          <section id="sourceBlock" class="url-card" hidden>
+            <span class="field-label">Source URL</span>
+            <p id="da-source-url-field" class="preview-url"></p>
+          </section>
+
+          <section id="previewBlock" class="url-card" hidden>
+            <span class="field-label">Destination URL</span>
+            <p id="preview" class="preview-url"></p>
+          </section>
+
+          <div class="actions-panel" id="actions" hidden>
+            <button type="button" id="open" class="btn btn-primary">
+              Open page for selected language
+            </button>
+            <button type="button" id="openAll" class="btn btn-secondary" hidden>
+              Open page for all languages
+            </button>
+          </div>
+        </main>
+      </div>
+    </div>
+    <!-- Modules at end of body so markup paints before da.live SDK loads (library iframe). -->
+    <script src="https://da.live/nx/utils/sdk.js" type="module"></script>
+    <script src="./languageswitcher.js" type="module"></script>
+  </body>
+</html>
