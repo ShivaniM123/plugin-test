@@ -15,7 +15,6 @@ export function buildAemAdminPath(org, repo, pathSegments) {
 }
 
 async function runAemQueue(pages, request) {
-  const opts = { method: 'POST', headers: { Authorization: `Bearer ${aemToken}` } };
   const queue = new Queue(request, 5);
 
   return new Promise((resolve) => {
