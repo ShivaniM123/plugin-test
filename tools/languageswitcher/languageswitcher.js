@@ -16,10 +16,11 @@ import {
   detectLocaleColumnKeys,
 } from './placeholders.js';
 import {
-  setAemToken,
-  buildAemAdminPath,
+  createAemFetcher,
+  buildAemPageRef,
   previewPages,
   publishPages,
+  summarizeAemResults,
 } from './aem-admin.js';
 
 const PRIMARY_LABEL_WITH_PICKER = 'Open page for selected language';
@@ -371,15 +372,18 @@ function resolveSitePath(contextPath, org, repo, segments) {
   return p;
 }
 
-function countAemSuccess(pages) {
-  return pages.filter((p) => p.status === 200).length;
+function formatAemResult(label, pages) {
+  const { ok, total, detail } = summarizeAemResults(pages);
+  if (ok === total) return `${ok} of ${total} page(s) ${label}.`;
+  const suffix = detail ? ` (${detail})` : '';
+  return `${ok} of ${total} page(s) ${label}.${suffix}`;
 }
 
 async function main() {
   const { context, actions, token } = await DA_SDK;
   const ui = getUi();
   setPanelTwoLanguagesMode(false);
-  if (token) setAemToken(token);
+  const aemFetch = createAemFetcher(actions, token);
 
   const pageUrl = contextToDaUrl({
     org: context.org,
@@ -514,43 +518,56 @@ async function main() {
         if (urls.length) scheduleCloseLibrary(actions);
       },
       previewAllClick: async () => {
-        if (!token) {
-          show('Preview requires DA authentication (token missing).', null, true, bulkOpts());
+        if (!aemFetch) {
+          show('Preview requires DA authentication. Open this tool from DA while signed in.', null, true, bulkOpts());
           return;
         }
         if (!targets.length) {
           show('No other languages to preview.', null, true, bulkOpts());
           return;
         }
-        const pages = targets.map((loc) => ({
-          path: buildAemAdminPath(org, repo, segmentsForLocale(loc)),
-        }));
+        const pages = targets.map((loc) => buildAemPageRef(
+          org,
+          repo,
+          useBranch,
+          segmentsForLocale(loc),
+        ));
+        const previewUrls = targets.map((loc) => buildAemPreviewUrl(
+          useBranch,
+          org,
+          repo,
+          segmentsForLocale(loc),
+          tier,
+        ));
         show('Previewing…', null, true, { ...bulkOpts(), bulkDisabled: true });
         try {
-          const result = await previewPages(pages);
-          const ok = countAemSuccess(result);
-          show(`${ok} of ${pages.length} page(s) previewed.`, null, true, bulkOpts());
+          const result = await previewPages(pages, aemFetch);
+          openUrlsInNewTabs(previewUrls);
+          show(formatAemResult('previewed', result), null, true, bulkOpts());
+          scheduleCloseLibrary(actions);
         } catch (e) {
           show(`Preview failed: ${e.message || String(e)}`, null, true, bulkOpts());
         }
       },
       publishAllClick: async () => {
-        if (!token) {
-          show('Publishing requires DA authentication (token missing).', null, true, bulkOpts());
+        if (!aemFetch) {
+          show('Publishing requires DA authentication. Open this tool from DA while signed in.', null, true, bulkOpts());
           return;
         }
         if (!targets.length) {
           show('No other languages to publish.', null, true, bulkOpts());
           return;
         }
-        const pages = targets.map((loc) => ({
-          path: buildAemAdminPath(org, repo, segmentsForLocale(loc)),
-        }));
+        const pages = targets.map((loc) => buildAemPageRef(
+          org,
+          repo,
+          useBranch,
+          segmentsForLocale(loc),
+        ));
         show('Publishing…', null, true, { ...bulkOpts(), bulkDisabled: true });
         try {
-          const result = await publishPages(pages);
-          const ok = countAemSuccess(result);
-          show(`${ok} of ${pages.length} page(s) published.`, null, true, bulkOpts());
+          const result = await publishPages(pages, aemFetch);
+          show(formatAemResult('published', result), null, true, bulkOpts());
         } catch (e) {
           show(`Publish failed: ${e.message || String(e)}`, null, true, bulkOpts());
         }
