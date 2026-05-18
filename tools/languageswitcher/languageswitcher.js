@@ -17,14 +17,14 @@ import {
 } from './placeholders.js';
 import {
   createAemFetcher,
-  buildAemPageRef,
+  buildAemAdminPath,
   previewPages,
   publishPages,
-  summarizeAemResults,
+  liveUrlsFromPages,
+  summarizeBulkResult,
 } from './aem-admin.js';
 
-const PRIMARY_LABEL_WITH_PICKER = 'Open page for selected language';
-let resolvedDaPageUrl = '';
+const PRIMARY_LABEL_WITH_PICKER = 'Open selected language';
 
 const SETTINGS = {
   tier: 'page',
@@ -47,17 +47,18 @@ function pickDaView(context) {
 function getUi() {
   return {
     statusEl: document.getElementById('status'),
-    previewEl: document.getElementById('preview'),
-    previewBlock: document.getElementById('previewBlock'),
-    sourceBlock: document.getElementById('sourceBlock'),
-    sourceEl: document.getElementById('da-source-url-field'),
+    bulkMessageEl: document.getElementById('bulkMessage'),
+    bulkFooter: document.getElementById('bulkFooter'),
     actionsEl: document.getElementById('actions'),
     langRow: document.getElementById('langRow'),
     langCombobox: document.getElementById('langCombobox'),
     langTrigger: document.getElementById('langSelectTrigger'),
     langMenu: document.getElementById('langSelectMenu'),
     langValue: document.getElementById('langSelectValue'),
+    currentLocaleEl: document.getElementById('currentLocale'),
+    currentLocaleValue: document.getElementById('currentLocaleValue'),
     openBtn: document.getElementById('open'),
+    openLabel: document.getElementById('openLabel'),
     openAllBtn: document.getElementById('openAll'),
     previewAllBtn: document.getElementById('previewAll'),
     publishAllBtn: document.getElementById('publishAll'),
@@ -84,13 +85,6 @@ function writeCache(key, rows, ttlMs) {
   }
 }
 
-function displayUrl(u) {
-  if (u == null || u === '') return '';
-  if (typeof u === 'string') return u.trim();
-  if (typeof u === 'object' && typeof u.href === 'string') return u.href.trim();
-  return String(u).trim();
-}
-
 function openUrlsInNewTabs(urls) {
   urls.filter(Boolean).forEach((href) => {
     window.open(typeof href === 'string' ? href : String(href), '_blank', 'noopener,noreferrer');
@@ -101,63 +95,98 @@ function scheduleCloseLibrary(actions) {
   if (typeof actions?.closeLibrary === 'function') window.setTimeout(() => actions.closeLibrary(), 300);
 }
 
-function setUi(ui, status, previewUrl, canOpen, actions, opts = {}) {
-  const showLangRow = opts.showLangRow === true;
-  const showOpenAll = opts.showOpenAll === true;
-  const showPreviewAll = opts.showPreviewAll === true;
-  const showPublishAll = opts.showPublishAll === true;
-  const sourceUrlText = displayUrl(opts.sourceUrl) || displayUrl(resolvedDaPageUrl);
+function setBulkMessage(ui, text, opts = {}) {
+  if (!ui.bulkMessageEl) return;
+  const msg = String(text || '').trim();
+  const isError = opts.isError === true;
+  const isLoading = opts.isLoading === true;
+  const isSuccess = opts.isSuccess === true;
+  ui.bulkMessageEl.textContent = msg;
+  ui.bulkMessageEl.hidden = !msg;
+  ui.bulkMessageEl.classList.toggle('is-error', Boolean(isError && msg && !isLoading));
+  ui.bulkMessageEl.classList.toggle('is-loading', Boolean(isLoading && msg));
+  ui.bulkMessageEl.classList.toggle('is-success', Boolean(isSuccess && msg && !isLoading));
+}
 
-  ui.statusEl.textContent = status;
-  ui.statusEl.hidden = !String(status || '').trim() && Boolean(previewUrl);
+function setOpenLabel(ui, label) {
+  const text = typeof label === 'string' && label.trim() ? label.trim() : PRIMARY_LABEL_WITH_PICKER;
+  if (ui.openLabel) ui.openLabel.textContent = text;
+  else if (ui.openBtn) ui.openBtn.textContent = text;
+}
+
+function setCurrentLocale(ui, locale) {
+  if (!ui.currentLocaleEl) return;
+  const loc = String(locale || '').trim();
+  if (!loc) {
+    ui.currentLocaleEl.hidden = true;
+    return;
+  }
+  ui.currentLocaleEl.hidden = false;
+  if (ui.currentLocaleValue) ui.currentLocaleValue.textContent = loc;
+}
+
+function setUi(ui, actions, opts = {}) {
+  const {
+    status = '',
+    bulkMessage = '',
+    bulkMessageIsError = false,
+    openUrl = null,
+    canOpen = false,
+    showLangRow = false,
+    showOpenAll = false,
+    showPreviewAll = true,
+    showPublishAll = true,
+    openDisabled = false,
+    bulkDisabled = false,
+    openPrimaryLabel,
+    currentLocale,
+    openAllClick,
+    previewAllClick,
+    publishAllClick,
+    bulkMessageIsLoading = false,
+    bulkMessageIsSuccess = false,
+  } = opts;
+
+  const bulkActive = Boolean(String(bulkMessage || '').trim());
+  ui.statusEl.textContent = bulkActive ? '' : status;
+  ui.statusEl.hidden = bulkActive || !String(status || '').trim();
   ui.langRow.hidden = !showLangRow;
+  setCurrentLocale(ui, currentLocale);
+  setBulkMessage(ui, bulkMessage, {
+    isError: bulkMessageIsError,
+    isLoading: bulkMessageIsLoading,
+    isSuccess: bulkMessageIsSuccess,
+  });
 
-  if (sourceUrlText) {
-    ui.sourceBlock.hidden = false;
-    ui.sourceEl.textContent = sourceUrlText;
-  } else {
-    ui.sourceBlock.hidden = true;
-    ui.sourceEl.textContent = '';
-  }
+  const showActions = canOpen || showOpenAll || showPreviewAll || showPublishAll;
+  ui.actionsEl.hidden = !showActions;
+  if (ui.bulkFooter) ui.bulkFooter.hidden = !showPreviewAll && !showPublishAll;
 
-  if (previewUrl) {
-    ui.previewBlock.hidden = false;
-    ui.previewEl.textContent = previewUrl;
-  } else {
-    ui.previewBlock.hidden = true;
-    ui.previewEl.textContent = '';
-  }
-
-  ui.actionsEl.hidden = !(canOpen || showOpenAll || showPreviewAll || showPublishAll);
   ui.openBtn.hidden = !canOpen;
-  ui.openBtn.disabled = !canOpen || opts.openDisabled === true;
-  ui.openBtn.textContent =
-    typeof opts.openPrimaryLabel === 'string' && opts.openPrimaryLabel.trim()
-      ? opts.openPrimaryLabel.trim()
-      : PRIMARY_LABEL_WITH_PICKER;
+  ui.openBtn.disabled = !canOpen || openDisabled;
+  setOpenLabel(ui, openPrimaryLabel);
   ui.openBtn.onclick = () => {
-    if (!previewUrl) return;
-    openUrlsInNewTabs([previewUrl]);
+    if (!openUrl) return;
+    openUrlsInNewTabs([openUrl]);
     scheduleCloseLibrary(actions);
   };
 
   ui.openAllBtn.hidden = !showOpenAll;
   ui.openAllBtn.disabled = false;
-  ui.openAllBtn.onclick =
-    showOpenAll && typeof opts.openAllClick === 'function' ? opts.openAllClick : null;
+  ui.openAllBtn.onclick = showOpenAll && typeof openAllClick === 'function' ? openAllClick : null;
 
   if (ui.previewAllBtn) {
     ui.previewAllBtn.hidden = !showPreviewAll;
-    ui.previewAllBtn.disabled = opts.bulkDisabled === true;
+    ui.previewAllBtn.disabled = bulkDisabled;
     ui.previewAllBtn.onclick =
-      showPreviewAll && typeof opts.previewAllClick === 'function' ? opts.previewAllClick : null;
+      showPreviewAll && typeof previewAllClick === 'function' ? previewAllClick : null;
   }
 
   if (ui.publishAllBtn) {
     ui.publishAllBtn.hidden = !showPublishAll;
-    ui.publishAllBtn.disabled = opts.bulkDisabled === true;
+    ui.publishAllBtn.disabled = bulkDisabled;
     ui.publishAllBtn.onclick =
-      showPublishAll && typeof opts.publishAllClick === 'function' ? opts.publishAllClick : null;
+      showPublishAll && typeof publishAllClick === 'function' ? publishAllClick : null;
   }
 }
 
@@ -208,7 +237,6 @@ let langComboboxOutsideCloseWired = false;
 let langMenuResizeListener = null;
 let langMenuCloseTimer = null;
 
-/** Must match `.lang-select-menu` transition duration (close cleanup runs after paint). */
 const LANG_MENU_TRANSITION_MS = 200;
 
 function initLangCombobox(ui, keys, currentKey, onPickLocale) {
@@ -372,11 +400,14 @@ function resolveSitePath(contextPath, org, repo, segments) {
   return p;
 }
 
-function formatAemResult(label, pages) {
-  const { ok, total, detail } = summarizeAemResults(pages);
-  if (ok === total) return `${ok} of ${total} page(s) ${label}.`;
-  const suffix = detail ? ` (${detail})` : '';
-  return `${ok} of ${total} page(s) ${label}.${suffix}`;
+function publishResultMessage(published) {
+  const liveUrls = liveUrlsFromPages(published);
+  if (!published?.length) return { text: '', isError: false };
+  if (!liveUrls.length) {
+    return { text: 'No pages published.', isError: true };
+  }
+  const n = liveUrls.length;
+  return { text: `${n} page(s) published.`, isError: false };
 }
 
 async function main() {
@@ -393,33 +424,19 @@ async function main() {
   });
 
   if (!pageUrl) {
-    resolvedDaPageUrl = '';
-    setUi(
-      ui,
-      'Missing page context (org, repo, path). Open this tool from the Library while a document page is open.',
-      null,
-      false,
-      actions,
-    );
+    setUi(ui, actions, {
+      status: 'Missing page context (org, repo, path). Open this tool from the Library while a document page is open.',
+    });
     return;
   }
 
-  resolvedDaPageUrl = pageUrl.href;
-  const uiSrc = { sourceUrl: pageUrl.href };
-  const show = (status, previewUrl, canOpen, extra = {}) => setUi(
-    ui,
-    status,
-    previewUrl,
-    canOpen,
-    actions,
-    { ...uiSrc, ...extra },
-  );
+  const show = (opts) => setUi(ui, actions, opts);
 
-  show('Loading placeholders…', null, false, { showLangRow: false });
+  show({ status: 'Loading placeholders…', showLangRow: false });
 
   const parsed = parseCurrentPage(pageUrl);
   if (!parsed) {
-    show('Could not parse this page (need /org/repo/locale/… in context.path).', null, false);
+    show({ status: 'Could not parse this page (need /org/repo/locale/… in context.path).' });
     return;
   }
 
@@ -428,7 +445,7 @@ async function main() {
   const segments = [...parsed.segments];
 
   if (!segments.length) {
-    show('Path must include a locale folder after org/repo.', null, false);
+    show({ status: 'Path must include a locale folder after org/repo.' });
     return;
   }
 
@@ -448,7 +465,7 @@ async function main() {
       sitePath,
     );
   } catch (e) {
-    show(`Could not load placeholders.json (${e.message}).`, null, false);
+    show({ status: `Could not load placeholders.json (${e.message}).` });
     return;
   }
 
@@ -456,17 +473,15 @@ async function main() {
   setPanelTwoLanguagesMode(langKeys.length === 2);
 
   if (!langKeys.length) {
-    show(
-      'No path columns found in language-switcher (values should start with /, e.g. en, fr).',
-      null,
-      false,
-    );
+    show({
+      status: 'No path columns found in language-switcher (values should start with /, e.g. en, fr).',
+    });
     return;
   }
 
   const locIndex = findLocaleSegmentIndex(segments, langKeys);
   if (locIndex < 0) {
-    show(`No folder in this path matches a language column (${langKeys.join(', ')}).`, null, false);
+    show({ status: `No folder in this path matches a language column (${langKeys.join(', ')}).` });
     return;
   }
 
@@ -501,77 +516,101 @@ async function main() {
     getResolvedPath(toLoc),
   );
 
-  const otherLocales = () => {
-    if (!fromLoc) return [...langKeys];
-    return langKeys.filter((to) => to.toLowerCase() !== fromLoc.toLowerCase());
-  };
+  const bulkTargets = () => langKeys;
 
-  const bulkOpts = () => {
-    const targets = otherLocales();
+  const pageListForTargets = (targets) => targets.map((loc) => ({
+    path: buildAemAdminPath(org, repo, segmentsForLocale(loc)),
+  }));
+
+  const bulkOpts = (extra = {}) => {
+    const targets = bulkTargets();
     return {
+      currentLocale: fromLoc || urlSeg,
       showOpenAll: langKeys.length > 2,
       showPreviewAll: true,
       showPublishAll: true,
       openAllClick: () => {
-        const urls = targets.map(urlForLocale);
+        const others = fromLoc
+          ? targets.filter((to) => to.toLowerCase() !== fromLoc.toLowerCase())
+          : targets;
+        const urls = others.map(urlForLocale);
         openUrlsInNewTabs(urls);
         if (urls.length) scheduleCloseLibrary(actions);
       },
       previewAllClick: async () => {
         if (!aemFetch) {
-          show('Preview requires DA authentication. Open this tool from DA while signed in.', null, true, bulkOpts());
+          show({
+            ...bulkOpts(),
+            bulkMessage: 'Preview requires DA authentication. Open this tool from DA while signed in.',
+            bulkMessageIsError: true,
+          });
           return;
         }
         if (!targets.length) {
-          show('No other languages to preview.', null, true, bulkOpts());
+          show({ ...bulkOpts(), bulkMessage: 'No languages to preview.', bulkMessageIsError: true });
           return;
         }
-        const pages = targets.map((loc) => buildAemPageRef(
-          org,
-          repo,
-          useBranch,
-          segmentsForLocale(loc),
-        ));
-        const previewUrls = targets.map((loc) => buildAemPreviewUrl(
-          useBranch,
-          org,
-          repo,
-          segmentsForLocale(loc),
-          tier,
-        ));
-        show('Previewing…', null, true, { ...bulkOpts(), bulkDisabled: true });
+        show({
+          ...bulkOpts(),
+          bulkMessage: 'Previewing…',
+          bulkMessageIsLoading: true,
+          bulkDisabled: true,
+        });
         try {
-          const result = await previewPages(pages, aemFetch);
-          openUrlsInNewTabs(previewUrls);
-          show(formatAemResult('previewed', result), null, true, bulkOpts());
-          scheduleCloseLibrary(actions);
+          const result = await previewPages(pageListForTargets(targets), aemFetch);
+          const ok = result.every((p) => p.status === 200);
+          show({
+            ...bulkOpts(),
+            bulkMessage: summarizeBulkResult(result, 'previewed'),
+            bulkMessageIsSuccess: ok,
+            bulkMessageIsError: !ok,
+          });
         } catch (e) {
-          show(`Preview failed: ${e.message || String(e)}`, null, true, bulkOpts());
+          show({
+            ...bulkOpts(),
+            bulkMessage: `Preview failed: ${e.message || String(e)}`,
+            bulkMessageIsError: true,
+          });
         }
       },
       publishAllClick: async () => {
         if (!aemFetch) {
-          show('Publishing requires DA authentication. Open this tool from DA while signed in.', null, true, bulkOpts());
+          show({
+            ...bulkOpts(),
+            bulkMessage: 'Publishing requires DA authentication. Open this tool from DA while signed in.',
+            bulkMessageIsError: true,
+          });
           return;
         }
         if (!targets.length) {
-          show('No other languages to publish.', null, true, bulkOpts());
+          show({ ...bulkOpts(), bulkMessage: 'No languages to publish.', bulkMessageIsError: true });
           return;
         }
-        const pages = targets.map((loc) => buildAemPageRef(
-          org,
-          repo,
-          useBranch,
-          segmentsForLocale(loc),
-        ));
-        show('Publishing…', null, true, { ...bulkOpts(), bulkDisabled: true });
+        show({
+          ...bulkOpts(),
+          bulkMessage: 'Publishing…',
+          bulkMessageIsLoading: true,
+          bulkDisabled: true,
+        });
         try {
-          const result = await publishPages(pages, aemFetch);
-          show(formatAemResult('published', result), null, true, bulkOpts());
+          const published = await publishPages(pageListForTargets(targets), aemFetch);
+          const { text, isError } = publishResultMessage(published);
+          const ok = !isError && published.some((p) => p.status === 200);
+          show({
+            ...bulkOpts(),
+            bulkMessage: text || summarizeBulkResult(published, 'published'),
+            bulkMessageIsSuccess: ok,
+            bulkMessageIsError: isError || !ok,
+          });
         } catch (e) {
-          show(`Publish failed: ${e.message || String(e)}`, null, true, bulkOpts());
+          show({
+            ...bulkOpts(),
+            bulkMessage: `Publish failed: ${e.message || String(e)}`,
+            bulkMessageIsError: true,
+          });
         }
       },
+      ...extra,
     };
   };
 
@@ -579,51 +618,57 @@ async function main() {
     ui.langRow.hidden = true;
     const [only] = langKeys;
     if (urlSeg.toLowerCase() === only.toLowerCase()) {
-      show(
-        `Already on ${only}. Add another language column to map paths, or open a page in a different locale folder.`,
-        null,
-        false,
-        bulkOpts(),
-      );
+      show({
+        status: `Already on ${only}. Add another language column to map paths, or open a page in a different locale folder.`,
+        ...bulkOpts(),
+      });
       return;
     }
     const newSeg = [...segments.slice(0, locIndex), only, ...segments.slice(locIndex + 1)];
-    show('', buildDest(parsed, org, repo, newSeg, useBranch, tier, target, daView), true, {
+    show({
+      status: '',
+      openUrl: buildDest(parsed, org, repo, newSeg, useBranch, tier, target, daView),
+      canOpen: true,
       showLangRow: false,
-      openPrimaryLabel: `Open page in ${only}`,
+      openPrimaryLabel: `Open ${only}`,
       ...bulkOpts(),
     });
     return;
   }
 
   if (!fromLoc) {
-    show(
-      `This page’s locale folder is "${urlSeg}" but placeholders only define: ${langKeys.join(', ')}.`,
-      null,
-      false,
-      bulkOpts(),
-    );
+    show({
+      status: `This page’s locale folder is "${urlSeg}" but placeholders only define: ${langKeys.join(', ')}.`,
+      ...bulkOpts(),
+    });
     return;
   }
 
   const applyDestination = (toLoc) => {
     if (toLoc.toLowerCase() === fromLoc.toLowerCase()) {
-      show('Choose a language different from the current page.', null, true, {
-        showLangRow: showLangPicker,
+      show({
+        status: '',
+        canOpen: true,
         openDisabled: true,
+        showLangRow: showLangPicker,
         openPrimaryLabel: PRIMARY_LABEL_WITH_PICKER,
         ...bulkOpts(),
       });
       return;
     }
-    show('', urlForLocale(toLoc), true, {
+    show({
+      status: '',
+      openUrl: urlForLocale(toLoc),
+      canOpen: true,
       showLangRow: showLangPicker,
       openPrimaryLabel: showLangPicker
         ? PRIMARY_LABEL_WITH_PICKER
-        : `Open page in ${toLoc}`,
+        : `Open ${toLoc}`,
       ...bulkOpts(),
     });
   };
+
+  show({ status: '', ...bulkOpts() });
 
   if (showLangPicker) {
     initLangCombobox(ui, langKeys, fromLoc, applyDestination);
