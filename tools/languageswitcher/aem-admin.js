@@ -4,7 +4,15 @@ import { Queue } from 'https://da.live/nx/public/utils/tree.js';
 const AEM_ORIGIN = 'https://admin.hlx.page';
 
 /**
- * Prefer actions.daFetch (DA session auth). Fall back to Bearer token + fetch.
+ * Same path shape as da-locale-tools/tools/locales (newAEMFullPath).
+ */
+export function buildAemAdminPath(org, repo, pathSegments) {
+  const sitePath = pathSegments.length ? `/${pathSegments.join('/')}` : '';
+  return `/${org}/${repo}/main${sitePath}`;
+}
+
+/**
+ * Prefer actions.daFetch; fall back to Bearer token (locales uses fetch + Authorization).
  */
 export function createAemFetcher(actions, token) {
   if (typeof actions?.daFetch === 'function') {
@@ -16,26 +24,12 @@ export function createAemFetcher(actions, token) {
     headers: {
       ...opts.headers,
       Authorization: `Bearer ${token}`,
+      'x-content-source-authorization': `Bearer ${token}`,
     },
   });
 }
 
-export function canUseAemAdmin(actions, token) {
-  return Boolean(createAemFetcher(actions, token));
-}
-
-export function buildAemPageRef(org, repo, branch, pathSegments) {
-  const sitePath = pathSegments.length ? `/${pathSegments.join('/')}` : '';
-  return {
-    org, repo, branch, sitePath,
-  };
-}
-
-function buildAdminUrl(ref, action) {
-  return `${AEM_ORIGIN}/${action}/${ref.org}/${ref.repo}/${ref.branch}${ref.sitePath}`;
-}
-
-async function runAemQueue(pages, worker) {
+async function runQueuedPages(pages, worker) {
   const queue = new Queue(worker, 5);
 
   return new Promise((resolve) => {
@@ -53,12 +47,12 @@ async function runAemQueue(pages, worker) {
 }
 
 /**
- * Preview-only step from locales tools/locales/index.js publishPages.
+ * Preview-only — first step of locales publishPages (index.js).
  */
 export async function previewPages(pages, aemFetch) {
   const worker = async (page) => {
     try {
-      const resp = await aemFetch(buildAdminUrl(page, 'preview'), { method: 'POST' });
+      const resp = await aemFetch(`${AEM_ORIGIN}/preview${page.path}`, { method: 'POST' });
       page.status = resp.status;
       try {
         page.resp = await resp.json();
@@ -73,18 +67,18 @@ export async function previewPages(pages, aemFetch) {
       page.inProgress = false;
     }
   };
-  return runAemQueue(pages, worker);
+  return runQueuedPages(pages, worker);
 }
 
 /**
- * Full publish flow from locales tools/locales/index.js publishPages.
+ * Copied from da-locale-tools/tools/locales/index.js publishPages.
  */
 export async function publishPages(pages, aemFetch) {
   const worker = async (page) => {
     try {
-      let resp = await aemFetch(buildAdminUrl(page, 'preview'), { method: 'POST' });
+      let resp = await aemFetch(`${AEM_ORIGIN}/preview${page.path}`, { method: 'POST' });
       if (resp.status === 200) {
-        resp = await aemFetch(buildAdminUrl(page, 'live'), { method: 'POST' });
+        resp = await aemFetch(`${AEM_ORIGIN}/live${page.path}`, { method: 'POST' });
       }
       page.status = resp.status;
       try {
@@ -100,13 +94,19 @@ export async function publishPages(pages, aemFetch) {
       page.inProgress = false;
     }
   };
-  return runAemQueue(pages, worker);
+  return runQueuedPages(pages, worker);
 }
 
-export function summarizeAemResults(pages) {
+export function liveUrlsFromPages(pages) {
+  return pages.map((p) => p.resp?.live?.url).filter(Boolean);
+}
+
+export function summarizeBulkResult(pages, label) {
   const ok = pages.filter((p) => p.status === 200).length;
-  const failed = pages.filter((p) => p.status !== 200);
-  const detail = failed[0]?.error
-    || (failed[0]?.status ? `HTTP ${failed[0].status}` : '');
-  return { ok, total: pages.length, detail };
+  const total = pages.length;
+  if (!total) return `No pages to ${label}.`;
+  if (ok === total) return `${ok} of ${total} page(s) ${label}.`;
+  const failed = pages.find((p) => p.status !== 200);
+  const detail = failed?.error || (failed?.status ? `HTTP ${failed.status}` : '');
+  return `${ok} of ${total} page(s) ${label}.${detail ? ` (${detail})` : ''}`;
 }

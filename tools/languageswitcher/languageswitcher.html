@@ -3,78 +3,128 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Language Navigator</title>
+    <title>Language Switcher</title>
     <link rel="icon" href="data:," />
-    <!-- Spectrum tokens (same as other da.live tools) -->
     <link rel="stylesheet" href="https://da.live/nx/public/sl/styles.css" />
-    <!-- ./ so assets resolve on preview host / org/repo / tools / … -->
     <link rel="stylesheet" href="./languageswitcher.css" />
   </head>
   <body>
     <div class="ls-shell">
-      <div class="ls-panel" role="region" aria-label="Language Navigator">
+      <div class="ls-panel" role="region" aria-label="Language Switcher">
         <header class="app-header">
-          <div class="app-header-accent" aria-hidden="true"></div>
-          <div class="app-header-inner">
-            <h1 class="app-title">Language Navigator</h1>
+          <div class="app-header-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" focusable="false">
+              <path
+                fill="currentColor"
+                d="M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm-.75 3.5h1.5v5.25h-1.5V5.5Zm0 6.75h1.5V14h-1.5v-2.75Z"
+              />
+              <path
+                fill="currentColor"
+                d="M6.2 6.9c.55-1.35 1.65-2.2 3.05-2.35.35 1.45-.15 2.85-1.2 3.75-1.2 1.05-1.65 2.55-1.35 4.05h-1.55c-.2-1.05.25-2.15 1.05-2.85.75-.65 1.15-1.55 1-2.6Zm5.1-.35c1.35.15 2.45 1 3 2.35-.15 1.05-.25 2.15-1 2.6-.8.7-1.25 1.8-1.05 2.85H10.7c.3-1.5-.15-3-1.35-4.05-1.05-.9-1.55-2.3-1.2-3.75Z"
+                opacity="0.85"
+              />
+            </svg>
+          </div>
+          <div class="app-header-text">
+            <h1 class="app-title">Language Switcher</h1>
+            <p class="app-subtitle">Jump between localized pages</p>
           </div>
         </header>
 
         <main class="app-main">
-          <p id="status" class="status">Loading…</p>
+          <p id="status" class="status" role="status">Loading…</p>
 
-          <section id="langRow" class="lang-card" hidden>
-            <span class="field-label" id="langSelectLabel">Other languages</span>
-            <div class="lang-combobox" id="langCombobox">
-              <button
-                type="button"
-                id="langSelectTrigger"
-                class="lang-select-trigger"
-                aria-haspopup="listbox"
-                aria-expanded="false"
-                aria-controls="langSelectMenu"
-                aria-labelledby="langSelectLabel"
-              >
-                <span class="lang-select-value" id="langSelectValue"></span>
+          <div class="content-card">
+            <p id="currentLocale" class="current-locale" hidden>
+              Current page: <strong id="currentLocaleValue"></strong>
+            </p>
+
+            <section id="langRow" class="lang-section" hidden>
+              <label class="field-label" id="langSelectLabel" for="langSelectTrigger">
+                Select language
+              </label>
+              <div class="lang-combobox" id="langCombobox">
+                <button
+                  type="button"
+                  id="langSelectTrigger"
+                  class="lang-select-trigger"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                  aria-controls="langSelectMenu"
+                  aria-labelledby="langSelectLabel"
+                >
+                  <span class="lang-select-value" id="langSelectValue"></span>
+                  <span class="lang-select-chevron" aria-hidden="true"></span>
+                </button>
+                <div
+                  id="langSelectMenu"
+                  class="lang-select-menu"
+                  role="listbox"
+                  aria-labelledby="langSelectLabel"
+                  aria-hidden="true"
+                ></div>
+              </div>
+            </section>
+
+            <div class="actions-panel" id="actions" hidden>
+              <p class="section-label">Open in editor</p>
+              <button type="button" id="open" class="btn btn-primary btn-with-icon">
+                <span class="btn-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" focusable="false">
+                    <path
+                      fill="currentColor"
+                      d="M9.5 2.75a.75.75 0 0 1 1.06 0l3.69 3.69a.75.75 0 0 1 0 1.06l-7.19 7.19a2.12 2.12 0 0 1-1.5.62H4.12a.75.75 0 0 1-.75-.75V11.1a2.12 2.12 0 0 1 .62-1.5l7.19-7.19Zm.53 1.59L5.37 9l-.62.62v2.63h2.63l.62-.62 4.66-4.66-2.16-2.16Z"
+                    />
+                  </svg>
+                </span>
+                <span class="btn-label" id="openLabel">Open selected language</span>
               </button>
-              <div
-                id="langSelectMenu"
-                class="lang-select-menu"
-                role="listbox"
-                aria-labelledby="langSelectLabel"
-                aria-hidden="true"
-              ></div>
+              <button type="button" id="openAll" class="btn btn-secondary btn-with-icon" hidden>
+                <span class="btn-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" focusable="false">
+                    <path
+                      fill="currentColor"
+                      d="M3 4.25A1.25 1.25 0 0 1 4.25 3h7.5A1.25 1.25 0 0 1 13 4.25v1.17h1.08a.75.75 0 0 1 .53 1.28l-2.33 2.33a.75.75 0 0 1-1.06 0L9.19 6.7 6.53 9.36a.75.75 0 0 1-1.06 0L3.14 7.03a.75.75 0 0 1 .53-1.28H4.75V4.25Zm1.25-.5a.25.25 0 0 0-.25.25v2.42h1.5V4.25a.25.25 0 0 0-.25-.25Zm5.5 9.5H4.25a.25.25 0 0 0-.25.25v2.42h1.5V13.5a.25.25 0 0 0-.25-.25Zm5.5 0h-1.5v2.42h1.5a.25.25 0 0 0 .25-.25V13.5a.25.25 0 0 0-.25-.25Z"
+                    />
+                  </svg>
+                </span>
+                <span class="btn-label">Open all languages</span>
+              </button>
             </div>
-          </section>
-
-          <section id="sourceBlock" class="url-card" hidden>
-            <span class="field-label">Source URL</span>
-            <p id="da-source-url-field" class="preview-url"></p>
-          </section>
-
-          <section id="previewBlock" class="url-card" hidden>
-            <span class="field-label">Destination URL</span>
-            <p id="preview" class="preview-url"></p>
-          </section>
-
-          <div class="actions-panel" id="actions" hidden>
-            <button type="button" id="open" class="btn btn-primary">
-              Open page for selected language
-            </button>
-            <button type="button" id="openAll" class="btn btn-secondary" hidden>
-              Open page for all languages
-            </button>
-            <button type="button" id="previewAll" class="btn btn-secondary">
-              Preview All
-            </button>
-            <button type="button" id="publishAll" class="btn btn-secondary">
-              Publish All
-            </button>
           </div>
+
+          <footer class="bulk-footer" id="bulkFooter">
+            <p class="section-label">All languages on this page</p>
+            <p class="footer-hint">Preview or publish every locale version mapped in placeholders.</p>
+            <div class="bulk-actions-row">
+              <button type="button" id="previewAll" class="btn btn-outline btn-with-icon">
+                <span class="btn-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" focusable="false">
+                    <path
+                      fill="currentColor"
+                      d="M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Zm0 1.5a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0 1.75a.75.75 0 0 0-.75.75v2.17l1.72 1.72a.75.75 0 1 0 1.06-1.06l-1.47-1.47V6.5A.75.75 0 0 0 8 5.75Z"
+                    />
+                  </svg>
+                </span>
+                <span class="btn-label">Preview All</span>
+              </button>
+              <button type="button" id="publishAll" class="btn btn-primary btn-with-icon">
+                <span class="btn-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" focusable="false">
+                    <path
+                      fill="currentColor"
+                      d="M14.44 2.06a.75.75 0 0 1 1.06 0l.44.44a.75.75 0 0 1 0 1.06L8.18 11.28a.75.75 0 0 1-.53.22H5.25a.75.75 0 0 1-.75-.75V8.35a.75.75 0 0 1 .22-.53l7.72-7.72ZM6.5 8.94 12.56 2.88 12 2.31 5.94 8.38 6.5 8.94ZM2.5 9.5a.75.75 0 0 1 .75-.75h5.5a.75.75 0 0 1 0 1.5H3.25a.75.75 0 0 1-.75-.75v-5a.75.75 0 0 1 1.5 0v3.44l6.22-6.22a.75.75 0 0 1 1.06 1.06L4.81 9.5H6.5Z"
+                    />
+                  </svg>
+                </span>
+                <span class="btn-label">Publish All</span>
+              </button>
+            </div>
+            <p id="bulkMessage" class="bulk-message" role="status" aria-live="polite" hidden></p>
+          </footer>
         </main>
       </div>
     </div>
-    <!-- Modules at end of body so markup paints before da.live SDK loads (library iframe). -->
     <script src="https://da.live/nx/utils/sdk.js" type="module"></script>
     <script src="./languageswitcher.js" type="module"></script>
   </body>
