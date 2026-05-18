@@ -147,9 +147,8 @@ function setUi(ui, actions, opts = {}) {
     bulkMessageIsSuccess = false,
   } = opts;
 
-  const bulkActive = Boolean(String(bulkMessage || '').trim());
-  ui.statusEl.textContent = bulkActive ? '' : status;
-  ui.statusEl.hidden = bulkActive || !String(status || '').trim();
+  ui.statusEl.textContent = status;
+  ui.statusEl.hidden = !String(status || '').trim();
   ui.langRow.hidden = !showLangRow;
   setCurrentLocale(ui, currentLocale);
   setBulkMessage(ui, bulkMessage, {
@@ -158,7 +157,7 @@ function setUi(ui, actions, opts = {}) {
     isSuccess: bulkMessageIsSuccess,
   });
 
-  const showActions = canOpen || showOpenAll || showPreviewAll || showPublishAll;
+  const showActions = canOpen || showOpenAll;
   ui.actionsEl.hidden = !showActions;
   if (ui.bulkFooter) ui.bulkFooter.hidden = !showPreviewAll && !showPublishAll;
 
@@ -430,7 +429,31 @@ async function main() {
     return;
   }
 
-  const show = (opts) => setUi(ui, actions, opts);
+  let uiState = {
+    status: '',
+    bulkMessage: '',
+    bulkMessageIsError: false,
+    bulkMessageIsLoading: false,
+    bulkMessageIsSuccess: false,
+    openUrl: null,
+    canOpen: false,
+    showLangRow: false,
+    showOpenAll: false,
+    showPreviewAll: true,
+    showPublishAll: true,
+    openDisabled: false,
+    bulkDisabled: false,
+    openPrimaryLabel: PRIMARY_LABEL_WITH_PICKER,
+    currentLocale: '',
+    openAllClick: null,
+    previewAllClick: null,
+    publishAllClick: null,
+  };
+
+  const show = (patch = {}) => {
+    uiState = { ...uiState, ...patch };
+    setUi(ui, actions, uiState);
+  };
 
   show({ status: 'Loading placeholders…', showLangRow: false });
 
@@ -522,10 +545,17 @@ async function main() {
     path: buildAemAdminPath(org, repo, segmentsForLocale(loc)),
   }));
 
-  const bulkOpts = (extra = {}) => {
+  const resetBulkMessageFlags = () => ({
+    bulkMessageIsError: false,
+    bulkMessageIsLoading: false,
+    bulkMessageIsSuccess: false,
+  });
+
+  const wireBulkActions = () => {
     const targets = bulkTargets();
-    return {
+    show({
       currentLocale: fromLoc || urlSeg,
+      showLangRow: showLangPicker,
       showOpenAll: langKeys.length > 2,
       showPreviewAll: true,
       showPublishAll: true,
@@ -540,35 +570,38 @@ async function main() {
       previewAllClick: async () => {
         if (!aemFetch) {
           show({
-            ...bulkOpts(),
             bulkMessage: 'Preview requires DA authentication. Open this tool from DA while signed in.',
+            ...resetBulkMessageFlags(),
             bulkMessageIsError: true,
           });
           return;
         }
         if (!targets.length) {
-          show({ ...bulkOpts(), bulkMessage: 'No languages to preview.', bulkMessageIsError: true });
+          show({
+            bulkMessage: 'No languages to preview.',
+            ...resetBulkMessageFlags(),
+            bulkMessageIsError: true,
+          });
           return;
         }
         show({
-          ...bulkOpts(),
           bulkMessage: 'Previewing…',
+          ...resetBulkMessageFlags(),
           bulkMessageIsLoading: true,
-          bulkDisabled: true,
         });
         try {
           const result = await previewPages(pageListForTargets(targets), aemFetch);
           const ok = result.every((p) => p.status === 200);
           show({
-            ...bulkOpts(),
             bulkMessage: summarizeBulkResult(result, 'previewed'),
+            ...resetBulkMessageFlags(),
             bulkMessageIsSuccess: ok,
             bulkMessageIsError: !ok,
           });
         } catch (e) {
           show({
-            ...bulkOpts(),
             bulkMessage: `Preview failed: ${e.message || String(e)}`,
+            ...resetBulkMessageFlags(),
             bulkMessageIsError: true,
           });
         }
@@ -576,62 +609,65 @@ async function main() {
       publishAllClick: async () => {
         if (!aemFetch) {
           show({
-            ...bulkOpts(),
             bulkMessage: 'Publishing requires DA authentication. Open this tool from DA while signed in.',
+            ...resetBulkMessageFlags(),
             bulkMessageIsError: true,
           });
           return;
         }
         if (!targets.length) {
-          show({ ...bulkOpts(), bulkMessage: 'No languages to publish.', bulkMessageIsError: true });
+          show({
+            bulkMessage: 'No languages to publish.',
+            ...resetBulkMessageFlags(),
+            bulkMessageIsError: true,
+          });
           return;
         }
         show({
-          ...bulkOpts(),
           bulkMessage: 'Publishing…',
+          ...resetBulkMessageFlags(),
           bulkMessageIsLoading: true,
-          bulkDisabled: true,
         });
         try {
           const published = await publishPages(pageListForTargets(targets), aemFetch);
           const { text, isError } = publishResultMessage(published);
           const ok = !isError && published.some((p) => p.status === 200);
           show({
-            ...bulkOpts(),
             bulkMessage: text || summarizeBulkResult(published, 'published'),
+            ...resetBulkMessageFlags(),
             bulkMessageIsSuccess: ok,
             bulkMessageIsError: isError || !ok,
           });
         } catch (e) {
           show({
-            ...bulkOpts(),
             bulkMessage: `Publish failed: ${e.message || String(e)}`,
+            ...resetBulkMessageFlags(),
             bulkMessageIsError: true,
           });
         }
       },
-      ...extra,
-    };
+    });
   };
 
+  wireBulkActions();
+
   if (langKeys.length === 1) {
-    ui.langRow.hidden = true;
     const [only] = langKeys;
     if (urlSeg.toLowerCase() === only.toLowerCase()) {
       show({
         status: `Already on ${only}. Add another language column to map paths, or open a page in a different locale folder.`,
-        ...bulkOpts(),
+        showLangRow: false,
       });
       return;
     }
     const newSeg = [...segments.slice(0, locIndex), only, ...segments.slice(locIndex + 1)];
     show({
       status: '',
-      openUrl: buildDest(parsed, org, repo, newSeg, useBranch, tier, target, daView),
       canOpen: true,
+      openUrl: buildDest(parsed, org, repo, newSeg, useBranch, tier, target, daView),
       showLangRow: false,
+      openDisabled: false,
       openPrimaryLabel: `Open ${only}`,
-      ...bulkOpts(),
     });
     return;
   }
@@ -639,7 +675,6 @@ async function main() {
   if (!fromLoc) {
     show({
       status: `This page’s locale folder is "${urlSeg}" but placeholders only define: ${langKeys.join(', ')}.`,
-      ...bulkOpts(),
     });
     return;
   }
@@ -649,26 +684,26 @@ async function main() {
       show({
         status: '',
         canOpen: true,
+        openUrl: null,
         openDisabled: true,
         showLangRow: showLangPicker,
         openPrimaryLabel: PRIMARY_LABEL_WITH_PICKER,
-        ...bulkOpts(),
       });
       return;
     }
     show({
       status: '',
-      openUrl: urlForLocale(toLoc),
       canOpen: true,
+      openUrl: urlForLocale(toLoc),
+      openDisabled: false,
       showLangRow: showLangPicker,
       openPrimaryLabel: showLangPicker
         ? PRIMARY_LABEL_WITH_PICKER
         : `Open ${toLoc}`,
-      ...bulkOpts(),
     });
   };
 
-  show({ status: '', ...bulkOpts() });
+  show({ status: '' });
 
   if (showLangPicker) {
     initLangCombobox(ui, langKeys, fromLoc, applyDestination);

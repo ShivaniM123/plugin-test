@@ -300,7 +300,6 @@ body {
   gap: 8px;
   margin: 0;
   padding: 12px 0 0;
-  border-block-start: 1px solid var(--border-quiet);
 }
 
 .actions-panel[hidden] {
