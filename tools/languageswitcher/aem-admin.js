@@ -37,6 +37,81 @@ export function createAemFetcher(actions, token) {
   }));
 }
 
+/**
+ * Parse admin x-error header (from da-live blocks/edit/utils/helpers.js).
+ */
+export function parseAemError(xError) {
+  if (!xError) return '';
+  if (xError.includes('PDF')) {
+    const [seg1, seg2] = xError.split(': ').slice(-2);
+    return `${seg1}: ${seg2}`;
+  }
+  if (xError.includes('MP4')) {
+    const [seg1] = xError.split(': ').slice(-2);
+    return seg1;
+  }
+  if (xError.includes('Image')) {
+    return xError.split(': ').pop().replace('.00', '');
+  }
+  return xError.replace('[admin] ', '');
+}
+
+export function isAccessDeniedStatus(status) {
+  return status === 401 || status === 403;
+}
+
+/**
+ * POST to admin.hlx.page — aligned with da-live saveToAem().
+ * @param {string} adminPath - /org/repo/main/locale/page
+ * @param {'preview'|'live'} action
+ * @param {Function} aemFetch
+ */
+export async function postToAem(adminPath, action, aemFetch) {
+  const segments = String(adminPath || '').replace(/^\//, '').toLowerCase().split('/');
+  const owner = segments[0];
+  const repo = segments[1];
+  const aemPath = segments.slice(3).join('/');
+
+  const url = `${AEM_ORIGIN}/${action}/${owner}/${repo}/main/${aemPath}`;
+  const resp = await aemFetch(url, { method: 'POST' });
+
+  if (!resp.ok) {
+    const authErr = isAccessDeniedStatus(resp.status);
+    const message = authErr ? `Not authorized to ${action}` : `Error during ${action}`;
+    const xerror = resp.headers?.get?.('x-error');
+    const details = xerror && !authErr ? parseAemError(xerror) : undefined;
+    return {
+      ok: false,
+      status: resp.status,
+      action,
+      message,
+      details,
+      authErr,
+    };
+  }
+
+  try {
+    return { ok: true, status: resp.status, json: await resp.json() };
+  } catch {
+    return { ok: true, status: resp.status, json: null };
+  }
+}
+
+function applyAemResult(page, result, { step = 'preview' } = {}) {
+  page.status = result.status;
+  if (result.ok) {
+    page.resp = result.json;
+    page.error = undefined;
+    page.adminMessage = undefined;
+    if (step === 'preview') page.failedStep = null;
+    return;
+  }
+  page.resp = null;
+  page.error = result.details || result.message;
+  page.adminMessage = result.message;
+  page.failedStep = step;
+}
+
 async function runQueuedPages(pages, worker) {
   const queue = new Queue(worker, 5);
 
@@ -55,21 +130,17 @@ async function runQueuedPages(pages, worker) {
 }
 
 /**
- * Preview-only — first step of locales publishPages (index.js).
+ * Preview — da-live handleAction('preview') → saveToAem(path, 'preview').
  */
 export async function previewPages(pages, aemFetch) {
   const worker = async (page) => {
     try {
-      const resp = await aemFetch(`${AEM_ORIGIN}/preview${page.path}`, { method: 'POST' });
-      page.status = resp.status;
-      try {
-        page.resp = await resp.json();
-      } catch {
-        page.resp = null;
-      }
+      const result = await postToAem(page.path, 'preview', aemFetch);
+      applyAemResult(page, result, { step: 'preview' });
     } catch (err) {
       page.status = 0;
       page.error = err.message || String(err);
+      page.failedStep = 'preview';
     } finally {
       page.done = true;
       page.inProgress = false;
@@ -79,32 +150,22 @@ export async function previewPages(pages, aemFetch) {
 }
 
 /**
- * Copied from da-locale-tools/tools/locales/index.js publishPages.
+ * Publish — da-live handleAction('publish'): preview then live.
  */
 export async function publishPages(pages, aemFetch) {
   const worker = async (page) => {
     try {
-      const previewResp = await aemFetch(`${AEM_ORIGIN}/preview${page.path}`, { method: 'POST' });
-      page.previewStatus = previewResp.status;
-      try {
-        page.previewResp = await previewResp.json();
-      } catch {
-        page.previewResp = null;
+      const previewResult = await postToAem(page.path, 'preview', aemFetch);
+      page.previewStatus = previewResult.status;
+      page.previewResp = previewResult.ok ? previewResult.json : null;
+
+      if (!previewResult.ok) {
+        applyAemResult(page, previewResult, { step: 'preview' });
+        return;
       }
-      if (previewResp.status === 200) {
-        const liveResp = await aemFetch(`${AEM_ORIGIN}/live${page.path}`, { method: 'POST' });
-        page.status = liveResp.status;
-        page.failedStep = liveResp.status === 200 ? null : 'publish';
-        try {
-          page.resp = await liveResp.json();
-        } catch {
-          page.resp = null;
-        }
-      } else {
-        page.status = previewResp.status;
-        page.failedStep = 'preview';
-        page.resp = page.previewResp;
-      }
+
+      const liveResult = await postToAem(page.path, 'live', aemFetch);
+      applyAemResult(page, liveResult, { step: 'publish' });
     } catch (err) {
       page.status = 0;
       page.previewStatus = page.previewStatus ?? 0;
@@ -127,11 +188,51 @@ function formatLocaleCode(locale) {
   return s ? s.toLowerCase() : '?';
 }
 
+const HTTP_STATUS_REASON = {
+  401: 'not authorized',
+  403: 'not authorized',
+  404: 'page not found',
+  500: 'server error',
+  502: 'server error',
+  503: 'service unavailable',
+};
+
 function pageErrorDetail(page, { usePreviewStatus = false } = {}) {
   if (page?.error) return String(page.error);
-  if (usePreviewStatus && page.previewStatus) return `HTTP ${page.previewStatus}`;
-  if (page?.status) return `HTTP ${page.status}`;
+  const status = usePreviewStatus ? page.previewStatus : page.status;
+  if (status) return `HTTP ${status}`;
   return 'failed';
+}
+
+/** Short, readable reason for bulk messages (AEM detail or friendly HTTP label). */
+function formatErrorReason(detail) {
+  const text = String(detail || '').trim();
+  const match = /^HTTP (\d+)$/.exec(text);
+  if (match) return HTTP_STATUS_REASON[match[1]] || text.toLowerCase();
+  return text;
+}
+
+function groupPagesByError(pages, opts = {}) {
+  const byError = new Map();
+  pages.forEach((p) => {
+    const detail = pageErrorDetail(p, opts);
+    const langs = byError.get(detail) || [];
+    langs.push(formatLocaleCode(p.locale));
+    byError.set(detail, langs);
+  });
+  return byError;
+}
+
+function formatCountLine(ok, total, label) {
+  return `${ok} of ${total} language(s) ${label}.`;
+}
+
+function formatGroupedFailureLines(pages, opts, lineForGroup) {
+  return [...groupPagesByError(pages, opts).entries()].map(([detail, langs]) => {
+    const locales = langs.join(', ');
+    const reason = formatErrorReason(detail);
+    return lineForGroup(locales, reason);
+  });
 }
 
 function isPreviewFailure(page) {
@@ -139,12 +240,14 @@ function isPreviewFailure(page) {
     || (page?.previewStatus != null && page.previewStatus !== 200);
 }
 
-export function isAccessDeniedStatus(status) {
-  return status === 401 || status === 403;
+function pageDeniedStatus(page) {
+  if (isPreviewFailure(page) && page.previewStatus) return page.previewStatus;
+  return page.status;
 }
 
 export function allPagesAccessDenied(pages) {
-  return (pages?.length ?? 0) > 0 && pages.every((p) => isAccessDeniedStatus(p.status));
+  return (pages?.length ?? 0) > 0
+    && pages.every((p) => isAccessDeniedStatus(pageDeniedStatus(p)));
 }
 
 /** User-facing message when preview/publish is not allowed (no token or HTTP 401/403). */
@@ -153,41 +256,38 @@ export function permissionDeniedMessage(action) {
   return `You don't have permission to ${verb}. Contact your administrator.`;
 }
 
-function formatFailureList(pages, opts = {}) {
-  return pages
-    .map((p) => `${formatLocaleCode(p.locale)} ${pageErrorDetail(p, opts)}`)
-    .join(', ');
-}
-
 function summarizePublishResult(pages, label) {
   const total = pages?.length ?? 0;
   const failed = pages.filter((p) => p.status !== 200);
   const ok = total - failed.length;
 
   if (!failed.length) {
-    return `${ok} of ${total} page(s) ${label}.`;
+    return formatCountLine(ok, total, label);
   }
 
-  const summary = `${ok} of ${total} page(s) ${label}.`;
   const previewFailed = failed.filter(isPreviewFailure);
   const publishFailed = failed.filter((p) => !isPreviewFailure(p));
-  const lines = [summary];
+  const lines = [formatCountLine(ok, total, label)];
 
-  if (previewFailed.length) {
-    lines.push(
-      `Preview failed for ${formatFailureList(previewFailed, { usePreviewStatus: true })}, hence publish also failed.`,
-    );
-  }
-  if (publishFailed.length) {
-    lines.push(`Publish failed for ${formatFailureList(publishFailed)}.`);
-  }
+  lines.push(
+    ...formatGroupedFailureLines(
+      previewFailed,
+      { usePreviewStatus: true },
+      (locales, reason) => `Publish skipped for ${locales} — preview failed (${reason}).`,
+    ),
+    ...formatGroupedFailureLines(
+      publishFailed,
+      {},
+      (locales, reason) => `Could not publish ${locales} (${reason}).`,
+    ),
+  );
 
   return lines.join('\n');
 }
 
 export function summarizeBulkResult(pages, label, action = 'preview') {
   const total = pages?.length ?? 0;
-  if (!total) return `No pages to ${label}.`;
+  if (!total) return `No languages to ${label.replace(/ed$/, '')}.`;
 
   if (allPagesAccessDenied(pages)) {
     return permissionDeniedMessage(action);
@@ -197,13 +297,20 @@ export function summarizeBulkResult(pages, label, action = 'preview') {
   const ok = total - failed.length;
 
   if (!failed.length) {
-    return `${ok} of ${total} page(s) ${label}.`;
+    return formatCountLine(ok, total, label);
   }
 
   if (action === 'publish') {
     return summarizePublishResult(pages, label);
   }
 
-  const summary = `${ok} of ${total} page(s) ${label}.`;
-  return `${summary}\nPreview failed for ${formatFailureList(failed)}.`;
+  const lines = [
+    formatCountLine(ok, total, label),
+    ...formatGroupedFailureLines(
+      failed,
+      {},
+      (locales, reason) => `Could not preview ${locales} (${reason}).`,
+    ),
+  ];
+  return lines.join('\n');
 }

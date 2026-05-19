@@ -49,6 +49,10 @@ export function permissionDeniedMessageForAccess() {
   return "You don't have permission to access this content. Contact your administrator.";
 }
 
+export function permissionDeniedMessageForPreview() {
+  return "You don't have permission to preview. Contact your administrator.";
+}
+
 export function permissionDeniedMessageForPublish() {
   return "You don't have permission to publish. Contact your administrator.";
 }
@@ -68,7 +72,8 @@ export function buildDaSourceUrl(org, repo, sitePath) {
 
 /**
  * Probe DA ACL for the open document via actions.daFetch (x-da-actions).
- * Preview/publish on admin.hlx.page are still enforced separately on click.
+ * Per da-live: read = view; write = edit + preview/publish at the DA layer.
+ * admin.hlx.page still enforces preview/publish separately on click (401/403).
  *
  * @param {Function|null} daFetch
  * @param {string} org
@@ -159,9 +164,9 @@ export async function checkDaContentAccess(daFetch, org, repo, sitePath) {
     permissions,
     canRead: true,
     canWrite,
-    canPreview: true,
+    canPreview: canWrite,
     canPublish: canWrite,
     denied: false,
-    message: canWrite ? '' : permissionDeniedMessageForPublish(),
+    message: '',
   };
 }
