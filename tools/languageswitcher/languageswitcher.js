@@ -21,10 +21,16 @@ import {
   previewPages,
   publishPages,
   summarizeBulkResult,
+  permissionDeniedMessage,
 } from './aem-admin.js';
+import {
+  checkDaContentAccess,
+  permissionDeniedMessageForAccess,
+  permissionDeniedMessageForPublish,
+} from './da-permissions.js';
 
 const PRIMARY_LABEL_WITH_PICKER = 'Open page for selected language';
-const BULK_MESSAGE_DISMISS_MS = 3000;
+const BULK_MESSAGE_SUCCESS_DISMISS_MS = 5000;
 
 /** Always show locale codes in lowercase (avoids DA global strong { uppercase }). */
 const formatLocaleDisplay = (locale) => {
@@ -167,7 +173,7 @@ function setUi(ui, actions, opts = {}) {
 
   const showActions = canOpen || showOpenAll;
   ui.actionsEl.hidden = !showActions;
-  if (ui.bulkFooter) ui.bulkFooter.hidden = !showPreviewAll && !showPublishAll;
+  if (ui.bulkFooter) ui.bulkFooter.hidden = !showPreviewAll && !showPublishAll && !bulkMessage;
 
   ui.openBtn.hidden = !canOpen;
   ui.openBtn.disabled = !canOpen || openDisabled;
@@ -182,16 +188,15 @@ function setUi(ui, actions, opts = {}) {
   ui.openAllBtn.disabled = false;
   ui.openAllBtn.onclick = showOpenAll && typeof openAllClick === 'function' ? openAllClick : null;
 
-  const panelLoading = document.querySelector('.ls-panel')?.classList.contains('ls-loading');
   if (ui.previewAllBtn) {
-    ui.previewAllBtn.hidden = !showPreviewAll || panelLoading;
+    ui.previewAllBtn.hidden = !showPreviewAll;
     ui.previewAllBtn.disabled = bulkDisabled;
     ui.previewAllBtn.onclick =
       showPreviewAll && typeof previewAllClick === 'function' ? previewAllClick : null;
   }
 
   if (ui.publishAllBtn) {
-    ui.publishAllBtn.hidden = !showPublishAll || panelLoading;
+    ui.publishAllBtn.hidden = !showPublishAll;
     ui.publishAllBtn.disabled = bulkDisabled;
     ui.publishAllBtn.onclick =
       showPublishAll && typeof publishAllClick === 'function' ? publishAllClick : null;
@@ -411,10 +416,39 @@ function resolveSitePath(contextPath, org, repo, segments) {
   return p;
 }
 
+async function resolveToolAccess(actions, aemFetch, org, repo, sitePath) {
+  if (typeof actions?.daFetch === 'function') {
+    return checkDaContentAccess(actions.daFetch, org, repo, sitePath);
+  }
+  if (aemFetch) {
+    return {
+      authenticated: true,
+      status: 0,
+      permissions: ['read', 'write'],
+      canRead: true,
+      canWrite: true,
+      canPreview: true,
+      canPublish: true,
+      denied: false,
+      message: '',
+    };
+  }
+  return {
+    authenticated: false,
+    status: 0,
+    permissions: [],
+    canRead: false,
+    canWrite: false,
+    canPreview: false,
+    canPublish: false,
+    denied: true,
+    message: '',
+  };
+}
+
 async function main() {
   const { context, actions, token } = await DA_SDK;
   const ui = getUi();
-  setPanelLoading(true);
   const aemFetch = createAemFetcher(actions, token);
 
   const pageUrl = contextToDaUrl({
@@ -441,8 +475,8 @@ async function main() {
     canOpen: false,
     showLangRow: false,
     showOpenAll: false,
-    showPreviewAll: true,
-    showPublishAll: true,
+    showPreviewAll: false,
+    showPublishAll: false,
     openDisabled: false,
     bulkDisabled: false,
     openPrimaryLabel: PRIMARY_LABEL_WITH_PICKER,
@@ -454,6 +488,28 @@ async function main() {
 
   let bulkMessageDismissTimer = null;
 
+  const bulkCtx = {
+    ready: false,
+    toolAccess: null,
+    targets: [],
+    pageListForTargets: () => [],
+    lastPreviewByLocale: {},
+  };
+
+  const rememberPreviewResults = (results) => {
+    bulkCtx.lastPreviewByLocale = {};
+    results.forEach((p) => {
+      const key = String(p.locale || '').trim().toLowerCase();
+      if (key) bulkCtx.lastPreviewByLocale[key] = p;
+    });
+  };
+
+  const resetBulkMessageFlags = () => ({
+    bulkMessageIsError: false,
+    bulkMessageIsLoading: false,
+    bulkMessageIsSuccess: false,
+  });
+
   const show = (patch = {}) => {
     if (bulkMessageDismissTimer) {
       clearTimeout(bulkMessageDismissTimer);
@@ -463,7 +519,7 @@ async function main() {
     setUi(ui, actions, uiState);
 
     const msg = String(uiState.bulkMessage || '').trim();
-    if (msg && !uiState.bulkMessageIsLoading) {
+    if (msg && !uiState.bulkMessageIsLoading && uiState.bulkMessageIsSuccess) {
       bulkMessageDismissTimer = window.setTimeout(() => {
         bulkMessageDismissTimer = null;
         show({
@@ -472,7 +528,137 @@ async function main() {
           bulkMessageIsLoading: false,
           bulkMessageIsSuccess: false,
         });
-      }, BULK_MESSAGE_DISMISS_MS);
+      }, BULK_MESSAGE_SUCCESS_DISMISS_MS);
+    }
+  };
+
+  const previewAllClick = async () => {
+    if (!bulkCtx.ready) {
+      show({
+        bulkMessage: 'Still loading…',
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
+      return;
+    }
+    const { toolAccess } = bulkCtx;
+    if (!aemFetch) {
+      show({
+        bulkMessage: permissionDeniedMessage('preview'),
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
+      return;
+    }
+    if (!toolAccess?.canRead || !toolAccess?.canPreview) {
+      show({
+        bulkMessage: toolAccess?.message
+          || (!toolAccess?.canRead
+            ? permissionDeniedMessageForAccess()
+            : permissionDeniedMessage('preview')),
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
+      return;
+    }
+    const targets = bulkCtx.targets;
+    if (!targets.length) {
+      show({
+        bulkMessage: 'No languages to preview.',
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
+      return;
+    }
+    show({
+      bulkMessage: 'Previewing…',
+      ...resetBulkMessageFlags(),
+      bulkMessageIsLoading: true,
+    });
+    try {
+      const result = await previewPages(bulkCtx.pageListForTargets(targets), aemFetch);
+      rememberPreviewResults(result);
+      const ok = result.every((p) => p.status === 200);
+      show({
+        bulkMessage: summarizeBulkResult(result, 'previewed', 'preview'),
+        ...resetBulkMessageFlags(),
+        bulkMessageIsSuccess: ok,
+        bulkMessageIsError: !ok,
+      });
+    } catch (e) {
+      show({
+        bulkMessage: `Preview failed: ${e.message || String(e)}`,
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
+    }
+  };
+
+  const publishAllClick = async () => {
+    if (!bulkCtx.ready) {
+      show({
+        bulkMessage: 'Still loading…',
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
+      return;
+    }
+    const { toolAccess } = bulkCtx;
+    if (!aemFetch) {
+      show({
+        bulkMessage: permissionDeniedMessage('publish'),
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
+      return;
+    }
+    if (!toolAccess?.canRead || !toolAccess?.canPublish) {
+      show({
+        bulkMessage: toolAccess?.message
+          || (!toolAccess?.canRead
+            ? permissionDeniedMessageForAccess()
+            : permissionDeniedMessageForPublish()),
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
+      return;
+    }
+    const targets = bulkCtx.targets;
+    if (!targets.length) {
+      show({
+        bulkMessage: 'No languages to publish.',
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
+      return;
+    }
+    show({
+      bulkMessage: 'Publishing…',
+      ...resetBulkMessageFlags(),
+      bulkMessageIsLoading: true,
+    });
+    try {
+      const published = await publishPages(bulkCtx.pageListForTargets(targets), aemFetch);
+      rememberPreviewResults(
+        published.map((p) => ({
+          locale: p.locale,
+          status: p.previewStatus ?? p.status,
+          error: p.error,
+        })),
+      );
+      const ok = published.length > 0 && published.every((p) => p.status === 200);
+      show({
+        bulkMessage: summarizeBulkResult(published, 'published', 'publish'),
+        ...resetBulkMessageFlags(),
+        bulkMessageIsSuccess: ok,
+        bulkMessageIsError: !ok,
+      });
+    } catch (e) {
+      show({
+        bulkMessage: `Publish failed: ${e.message || String(e)}`,
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
     }
   };
 
@@ -481,15 +667,22 @@ async function main() {
     show({
       bulkMessage: '',
       bulkMessageIsLoading: false,
+      showPreviewAll: true,
+      showPublishAll: true,
+      previewAllClick,
+      publishAllClick,
       ...patch,
     });
   };
 
+  setPanelLoading(true);
   show({
     status: '',
     bulkMessage: 'Loading…',
     bulkMessageIsLoading: true,
     showLangRow: false,
+    showPreviewAll: false,
+    showPublishAll: false,
   });
 
   const parsed = parseCurrentPage(pageUrl);
@@ -545,6 +738,8 @@ async function main() {
     return;
   }
 
+  const toolAccess = await resolveToolAccess(actions, aemFetch, org, repo, sitePath);
+
   const urlSeg = segments[locIndex];
   const afterLoc = pathAfterLocale(segments.slice(locIndex));
   const showLangPicker = langKeys.length >= 3;
@@ -583,110 +778,27 @@ async function main() {
     path: buildAemAdminPath(org, repo, segmentsForLocale(loc)),
   }));
 
-  const resetBulkMessageFlags = () => ({
-    bulkMessageIsError: false,
-    bulkMessageIsLoading: false,
-    bulkMessageIsSuccess: false,
+  bulkCtx.ready = true;
+  bulkCtx.toolAccess = toolAccess;
+  bulkCtx.targets = bulkTargets();
+  bulkCtx.pageListForTargets = pageListForTargets;
+
+  show({
+    currentLocale: fromLoc || urlSeg,
+    showLangRow: showLangPicker,
+    showOpenAll: langKeys.length > 2,
+    previewAllClick,
+    publishAllClick,
+    openAllClick: () => {
+      const targets = bulkCtx.targets;
+      const others = fromLoc
+        ? targets.filter((to) => to.toLowerCase() !== fromLoc.toLowerCase())
+        : targets;
+      const urls = others.map(urlForLocale);
+      openUrlsInNewTabs(urls);
+      if (urls.length) scheduleCloseLibrary(actions);
+    },
   });
-
-  const wireBulkActions = () => {
-    const targets = bulkTargets();
-    show({
-      currentLocale: fromLoc || urlSeg,
-      showLangRow: showLangPicker,
-      showOpenAll: langKeys.length > 2,
-      showPreviewAll: true,
-      showPublishAll: true,
-      openAllClick: () => {
-        const others = fromLoc
-          ? targets.filter((to) => to.toLowerCase() !== fromLoc.toLowerCase())
-          : targets;
-        const urls = others.map(urlForLocale);
-        openUrlsInNewTabs(urls);
-        if (urls.length) scheduleCloseLibrary(actions);
-      },
-      previewAllClick: async () => {
-        if (!aemFetch) {
-          show({
-            bulkMessage: 'Preview requires DA authentication. Open this tool from DA while signed in.',
-            ...resetBulkMessageFlags(),
-            bulkMessageIsError: true,
-          });
-          return;
-        }
-        if (!targets.length) {
-          show({
-            bulkMessage: 'No languages to preview.',
-            ...resetBulkMessageFlags(),
-            bulkMessageIsError: true,
-          });
-          return;
-        }
-        show({
-          bulkMessage: 'Previewing…',
-          ...resetBulkMessageFlags(),
-          bulkMessageIsLoading: true,
-        });
-        try {
-          const result = await previewPages(pageListForTargets(targets), aemFetch);
-          const ok = result.every((p) => p.status === 200);
-          show({
-            bulkMessage: summarizeBulkResult(result, 'previewed'),
-            ...resetBulkMessageFlags(),
-            bulkMessageIsSuccess: ok,
-            bulkMessageIsError: !ok,
-          });
-        } catch (e) {
-          show({
-            bulkMessage: `Preview failed: ${e.message || String(e)}`,
-            ...resetBulkMessageFlags(),
-            bulkMessageIsError: true,
-          });
-        }
-      },
-      publishAllClick: async () => {
-        if (!aemFetch) {
-          show({
-            bulkMessage: 'Publishing requires DA authentication. Open this tool from DA while signed in.',
-            ...resetBulkMessageFlags(),
-            bulkMessageIsError: true,
-          });
-          return;
-        }
-        if (!targets.length) {
-          show({
-            bulkMessage: 'No languages to publish.',
-            ...resetBulkMessageFlags(),
-            bulkMessageIsError: true,
-          });
-          return;
-        }
-        show({
-          bulkMessage: 'Publishing…',
-          ...resetBulkMessageFlags(),
-          bulkMessageIsLoading: true,
-        });
-        try {
-          const published = await publishPages(pageListForTargets(targets), aemFetch);
-          const ok = published.length > 0 && published.every((p) => p.status === 200);
-          show({
-            bulkMessage: summarizeBulkResult(published, 'published'),
-            ...resetBulkMessageFlags(),
-            bulkMessageIsSuccess: ok,
-            bulkMessageIsError: !ok,
-          });
-        } catch (e) {
-          show({
-            bulkMessage: `Publish failed: ${e.message || String(e)}`,
-            ...resetBulkMessageFlags(),
-            bulkMessageIsError: true,
-          });
-        }
-      },
-    });
-  };
-
-  wireBulkActions();
 
   if (langKeys.length === 1) {
     const [only] = langKeys;
