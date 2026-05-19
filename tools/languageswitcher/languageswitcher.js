@@ -182,15 +182,16 @@ function setUi(ui, actions, opts = {}) {
   ui.openAllBtn.disabled = false;
   ui.openAllBtn.onclick = showOpenAll && typeof openAllClick === 'function' ? openAllClick : null;
 
+  const panelLoading = document.querySelector('.ls-panel')?.classList.contains('ls-loading');
   if (ui.previewAllBtn) {
-    ui.previewAllBtn.hidden = !showPreviewAll;
+    ui.previewAllBtn.hidden = !showPreviewAll || panelLoading;
     ui.previewAllBtn.disabled = bulkDisabled;
     ui.previewAllBtn.onclick =
       showPreviewAll && typeof previewAllClick === 'function' ? previewAllClick : null;
   }
 
   if (ui.publishAllBtn) {
-    ui.publishAllBtn.hidden = !showPublishAll;
+    ui.publishAllBtn.hidden = !showPublishAll || panelLoading;
     ui.publishAllBtn.disabled = bulkDisabled;
     ui.publishAllBtn.onclick =
       showPublishAll && typeof publishAllClick === 'function' ? publishAllClick : null;
@@ -486,7 +487,7 @@ async function main() {
 
   show({
     status: '',
-    bulkMessage: 'Loading placeholders…',
+    bulkMessage: 'Loading…',
     bulkMessageIsLoading: true,
     showLangRow: false,
   });
