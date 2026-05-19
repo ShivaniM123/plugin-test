@@ -24,7 +24,9 @@ import {
   summarizeBulkResult,
 } from './aem-admin.js';
 
-const PRIMARY_LABEL_WITH_PICKER = 'Open selected language';
+const PRIMARY_LABEL_WITH_PICKER = 'Open page for selected language';
+
+const openPageInLabel = (locale) => `Open page in ${locale}`;
 
 const SETTINGS = {
   tier: 'page',
@@ -667,7 +669,7 @@ async function main() {
       openUrl: buildDest(parsed, org, repo, newSeg, useBranch, tier, target, daView),
       showLangRow: false,
       openDisabled: false,
-      openPrimaryLabel: `Open ${only}`,
+      openPrimaryLabel: openPageInLabel(only),
     });
     return;
   }
@@ -699,7 +701,7 @@ async function main() {
       showLangRow: showLangPicker,
       openPrimaryLabel: showLangPicker
         ? PRIMARY_LABEL_WITH_PICKER
-        : `Open ${toLoc}`,
+        : openPageInLabel(toLoc),
     });
   };
 

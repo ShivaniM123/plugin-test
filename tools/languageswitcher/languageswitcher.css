@@ -66,53 +66,6 @@ body {
   overflow: hidden;
 }
 
-.app-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 18px;
-  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--surface) 100%);
-  border-bottom: 1px solid var(--border-quiet);
-}
-
-.app-header-icon {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  color: var(--accent);
-  background: var(--surface);
-  border: 1px solid var(--border-quiet);
-  border-radius: var(--radius-sm);
-}
-
-.app-header-icon svg {
-  width: 22px;
-  height: 22px;
-}
-
-.app-header-text {
-  min-width: 0;
-}
-
-.app-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-  color: var(--text);
-}
-
-.app-subtitle {
-  margin: 2px 0 0;
-  font-size: 12px;
-  line-height: 1.35;
-  color: var(--text-muted);
-}
-
 .app-main {
   display: flex;
   flex-direction: column;
@@ -405,30 +358,6 @@ body {
 
 .bulk-actions-row .btn {
   flex: 1 1 0;
-  min-width: 0;
-}
-
-.btn-with-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.btn-icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-}
-
-.btn-icon svg {
-  display: block;
-  width: 16px;
-  height: 16px;
-}
-
-.btn-label {
   min-width: 0;
 }
 
