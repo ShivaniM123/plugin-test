@@ -188,34 +188,17 @@ function formatLocaleCode(locale) {
   return s ? s.toLowerCase() : '?';
 }
 
-const HTTP_STATUS_REASON = {
-  401: 'not authorized',
-  403: 'not authorized',
-  404: 'page not found',
-  500: 'server error',
-  502: 'server error',
-  503: 'service unavailable',
-};
-
-function pageErrorDetail(page, { usePreviewStatus = false } = {}) {
-  if (page?.error) return String(page.error);
+/** Bulk UI only — HTTP status, not long AEM x-error text. */
+function pageBulkErrorKey(page, { usePreviewStatus = false } = {}) {
   const status = usePreviewStatus ? page.previewStatus : page.status;
   if (status) return `HTTP ${status}`;
   return 'failed';
 }
 
-/** Short, readable reason for bulk messages (AEM detail or friendly HTTP label). */
-function formatErrorReason(detail) {
-  const text = String(detail || '').trim();
-  const match = /^HTTP (\d+)$/.exec(text);
-  if (match) return HTTP_STATUS_REASON[match[1]] || text.toLowerCase();
-  return text;
-}
-
 function groupPagesByError(pages, opts = {}) {
   const byError = new Map();
   pages.forEach((p) => {
-    const detail = pageErrorDetail(p, opts);
+    const detail = pageBulkErrorKey(p, opts);
     const langs = byError.get(detail) || [];
     langs.push(formatLocaleCode(p.locale));
     byError.set(detail, langs);
@@ -224,15 +207,14 @@ function groupPagesByError(pages, opts = {}) {
 }
 
 function formatCountLine(ok, total, label) {
-  return `${ok} of ${total} language(s) ${label}.`;
+  return `${ok} of ${total} page(s) ${label}.`;
 }
 
-function formatGroupedFailureLines(pages, opts, lineForGroup) {
-  return [...groupPagesByError(pages, opts).entries()].map(([detail, langs]) => {
-    const locales = langs.join(', ');
-    const reason = formatErrorReason(detail);
-    return lineForGroup(locales, reason);
-  });
+/** e.g. "en, sp (HTTP 404)" */
+function formatFailureList(pages, opts = {}) {
+  return [...groupPagesByError(pages, opts).entries()]
+    .map(([detail, langs]) => `${langs.join(', ')} (${detail})`)
+    .join('; ');
 }
 
 function isPreviewFailure(page) {
@@ -269,25 +251,21 @@ function summarizePublishResult(pages, label) {
   const publishFailed = failed.filter((p) => !isPreviewFailure(p));
   const lines = [formatCountLine(ok, total, label)];
 
-  lines.push(
-    ...formatGroupedFailureLines(
-      previewFailed,
-      { usePreviewStatus: true },
-      (locales, reason) => `Publish skipped for ${locales} — preview failed (${reason}).`,
-    ),
-    ...formatGroupedFailureLines(
-      publishFailed,
-      {},
-      (locales, reason) => `Could not publish ${locales} (${reason}).`,
-    ),
-  );
+  if (previewFailed.length) {
+    lines.push(
+      `Preview failed for ${formatFailureList(previewFailed, { usePreviewStatus: true })}, hence publish also failed`,
+    );
+  }
+  if (publishFailed.length) {
+    lines.push(`Publish failed for ${formatFailureList(publishFailed)}`);
+  }
 
   return lines.join('\n');
 }
 
 export function summarizeBulkResult(pages, label, action = 'preview') {
   const total = pages?.length ?? 0;
-  if (!total) return `No languages to ${label.replace(/ed$/, '')}.`;
+  if (!total) return `No pages to ${label.replace(/ed$/, '')}.`;
 
   if (allPagesAccessDenied(pages)) {
     return permissionDeniedMessage(action);
@@ -304,13 +282,5 @@ export function summarizeBulkResult(pages, label, action = 'preview') {
     return summarizePublishResult(pages, label);
   }
 
-  const lines = [
-    formatCountLine(ok, total, label),
-    ...formatGroupedFailureLines(
-      failed,
-      {},
-      (locales, reason) => `Could not preview ${locales} (${reason}).`,
-    ),
-  ];
-  return lines.join('\n');
+  return `${formatCountLine(ok, total, label)}\nPreview failed for ${formatFailureList(failed)}`;
 }
