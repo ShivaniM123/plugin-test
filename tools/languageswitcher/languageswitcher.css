@@ -39,7 +39,10 @@ html {
 body {
   margin: 0;
   min-height: 100%;
+  height: 100%;
   min-width: 280px;
+  display: flex;
+  flex-direction: column;
   font: 13px/1.5 var(--font-sans);
   color: var(--text);
   background: var(--shell-bg);
@@ -47,16 +50,20 @@ body {
 }
 
 .ls-shell {
-  min-height: 100%;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
   padding: 16px;
 }
 
 .ls-panel {
   width: 100%;
   max-width: 420px;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -64,6 +71,13 @@ body {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-panel);
   overflow: hidden;
+}
+
+/* Fill dialog height and vertically center .app-main (two-language layout) */
+.ls-panel.ls-panel-two-languages {
+  flex: 1 1 auto;
+  min-height: 0;
+  justify-content: center;
 }
 
 .app-main {
@@ -74,6 +88,8 @@ body {
 }
 
 .ls-panel-two-languages .app-main {
+  flex: 0 0 auto;
+  width: 100%;
   padding-top: 20px;
   padding-bottom: 20px;
 }
@@ -118,10 +134,10 @@ body {
   display: none !important;
 }
 
-.current-locale strong {
+.current-locale-code {
   font-weight: 700;
   color: var(--accent);
-  text-transform: uppercase;
+  text-transform: lowercase;
 }
 
 .lang-section[hidden] {

@@ -26,7 +26,13 @@ import {
 
 const PRIMARY_LABEL_WITH_PICKER = 'Open page for selected language';
 
-const openPageInLabel = (locale) => `Open page in ${locale}`;
+/** Always show locale codes in lowercase (avoids DA global strong { uppercase }). */
+const formatLocaleDisplay = (locale) => {
+  const s = String(locale ?? '').trim();
+  return s ? s.toLocaleLowerCase('en') : '';
+};
+
+const openPageInLabel = (locale) => `Open page in ${formatLocaleDisplay(locale)}`;
 
 const SETTINGS = {
   tier: 'page',
@@ -124,7 +130,7 @@ function setCurrentLocale(ui, locale) {
     return;
   }
   ui.currentLocaleEl.hidden = false;
-  if (ui.currentLocaleValue) ui.currentLocaleValue.textContent = loc;
+  if (ui.currentLocaleValue) ui.currentLocaleValue.textContent = formatLocaleDisplay(loc);
 }
 
 function setUi(ui, actions, opts = {}) {
@@ -322,7 +328,7 @@ function initLangCombobox(ui, keys, currentKey, onPickLocale) {
   };
 
   const setTriggerLabel = (loc) => {
-    if (ui.langValue) ui.langValue.textContent = loc;
+    if (ui.langValue) ui.langValue.textContent = formatLocaleDisplay(loc);
   };
 
   ui.langMenu.replaceChildren();
@@ -331,7 +337,7 @@ function initLangCombobox(ui, keys, currentKey, onPickLocale) {
     b.type = 'button';
     b.className = 'lang-select-option';
     b.setAttribute('role', 'option');
-    b.textContent = k;
+    b.textContent = formatLocaleDisplay(k);
     b.addEventListener('click', (ev) => {
       ev.stopPropagation();
       closeMenu();
