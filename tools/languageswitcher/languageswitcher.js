@@ -291,14 +291,13 @@ function initLangCombobox(ui, keys, currentKey, onPickLocale) {
 
   const placeMenuBelowTrigger = () => {
     const r = ui.langTrigger.getBoundingClientRect();
-    const gap = 4;
-    const spaceBelow = window.innerHeight - r.bottom - gap - 8;
+    const spaceBelow = window.innerHeight - r.bottom - 8;
     const maxH = Math.max(100, spaceBelow);
     const s = ui.langMenu.style;
     s.position = 'fixed';
     s.left = `${r.left}px`;
     s.width = `${r.width}px`;
-    s.top = `${r.bottom + gap}px`;
+    s.top = `${r.bottom}px`;
     s.bottom = 'auto';
     s.right = 'auto';
     s.marginTop = '0';
