@@ -10,9 +10,9 @@
   </head>
   <body>
     <div class="ls-shell">
-      <div class="ls-panel" role="region" aria-label="Language Switcher">
+      <div class="ls-panel ls-loading" role="region" aria-label="Language Switcher">
         <main class="app-main">
-          <p id="status" class="status" role="status">Loading…</p>
+          <p id="status" class="status" role="status" hidden></p>
 
           <div class="content-card">
             <p id="currentLocale" class="current-locale" hidden>
@@ -50,7 +50,7 @@
               <button type="button" id="open" class="btn btn-primary">
                 <span id="openLabel">Open page for selected language</span>
               </button>
-              <button type="button" id="openAll" class="btn btn-secondary" hidden>
+              <button type="button" id="openAll" class="btn btn-primary" hidden>
                 Open page for all languages
               </button>
             </div>
@@ -61,7 +61,9 @@
               <button type="button" id="previewAll" class="btn btn-outline">Preview All</button>
               <button type="button" id="publishAll" class="btn btn-outline">Publish All</button>
             </div>
-            <p id="bulkMessage" class="bulk-message" role="status" aria-live="polite" hidden></p>
+            <p id="bulkMessage" class="bulk-message is-loading" role="status" aria-live="polite">
+              Loading placeholders…
+            </p>
           </footer>
         </main>
       </div>
