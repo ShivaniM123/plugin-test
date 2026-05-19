@@ -69,7 +69,8 @@ body {
   overflow: hidden;
 }
 
-/* Fill dialog height and vertically center .app-main (two-language layout) */
+/* Center .app-main while loading and in two-language layout (avoids jump after fetch) */
+.ls-panel.ls-loading,
 .ls-panel.ls-panel-two-languages {
   flex: 1 1 auto;
   min-height: 0;
@@ -86,7 +87,8 @@ body {
   background-color: white;
 }
 
-.ls-panel-two-languages .app-main {
+.ls-panel-two-languages .app-main,
+.ls-panel.ls-loading .app-main {
   flex: 0 0 auto;
   width: 100%;
   padding-top: 20px;
