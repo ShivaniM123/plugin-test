@@ -114,6 +114,10 @@ body {
   border-radius: var(--radius-sm);
 }
 
+.ls-panel.ls-loading .content-card {
+  display: none;
+}
+
 .current-locale {
   margin: 0;
   padding: 8px 10px;

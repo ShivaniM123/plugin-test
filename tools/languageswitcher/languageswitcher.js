@@ -26,6 +26,7 @@ import {
 import {
   checkDaContentAccess,
   permissionDeniedMessageForAccess,
+  permissionDeniedMessageForPreview,
   permissionDeniedMessageForPublish,
 } from './da-permissions.js';
 
@@ -550,12 +551,17 @@ async function main() {
       });
       return;
     }
-    if (!toolAccess?.canRead || !toolAccess?.canPreview) {
+    if (!toolAccess?.canRead) {
       show({
-        bulkMessage: toolAccess?.message
-          || (!toolAccess?.canRead
-            ? permissionDeniedMessageForAccess()
-            : permissionDeniedMessage('preview')),
+        bulkMessage: permissionDeniedMessageForAccess(),
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
+      return;
+    }
+    if (!toolAccess?.canPreview) {
+      show({
+        bulkMessage: permissionDeniedMessageForPreview(),
         ...resetBulkMessageFlags(),
         bulkMessageIsError: true,
       });
@@ -612,12 +618,17 @@ async function main() {
       });
       return;
     }
-    if (!toolAccess?.canRead || !toolAccess?.canPublish) {
+    if (!toolAccess?.canRead) {
       show({
-        bulkMessage: toolAccess?.message
-          || (!toolAccess?.canRead
-            ? permissionDeniedMessageForAccess()
-            : permissionDeniedMessageForPublish()),
+        bulkMessage: permissionDeniedMessageForAccess(),
+        ...resetBulkMessageFlags(),
+        bulkMessageIsError: true,
+      });
+      return;
+    }
+    if (!toolAccess?.canPublish) {
+      show({
+        bulkMessage: permissionDeniedMessageForPublish(),
         ...resetBulkMessageFlags(),
         bulkMessageIsError: true,
       });
