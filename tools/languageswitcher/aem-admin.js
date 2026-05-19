@@ -206,15 +206,45 @@ function groupPagesByError(pages, opts = {}) {
   return byError;
 }
 
-function formatCountLine(ok, total, label) {
-  return `${ok} of ${total} page(s) ${label}.`;
+const HTTP_STATUS_REASON = {
+  401: 'not authorized',
+  403: 'not authorized',
+  404: 'page not found',
+  500: 'server error',
+  502: 'server error',
+  503: 'service unavailable',
+};
+
+function formatFriendlyReason(detail) {
+  const text = String(detail || '').trim();
+  const match = /^HTTP (\d+)$/.exec(text);
+  if (match) return HTTP_STATUS_REASON[match[1]] || text.toLowerCase();
+  return text;
 }
 
-/** e.g. "en, sp (HTTP 404)" */
+function formatCountLine(ok, total, label, unit = 'page') {
+  return `${ok} of ${total} ${unit}(s) ${label}.`;
+}
+
+/** Preview bulk — e.g. "en, sp (HTTP 404)" */
 function formatFailureList(pages, opts = {}) {
   return [...groupPagesByError(pages, opts).entries()]
     .map(([detail, langs]) => `${langs.join(', ')} (${detail})`)
     .join('; ');
+}
+
+function formatPublishSkippedLines(pages) {
+  return [...groupPagesByError(pages, { usePreviewStatus: true }).entries()]
+    .map(([detail, langs]) => (
+      `Publish skipped for ${langs.join(', ')} — preview failed (${formatFriendlyReason(detail)}).`
+    ));
+}
+
+function formatPublishFailedLines(pages) {
+  return [...groupPagesByError(pages).entries()]
+    .map(([detail, langs]) => (
+      `Publish failed for ${langs.join(', ')} (${formatFriendlyReason(detail)}).`
+    ));
 }
 
 function isPreviewFailure(page) {
@@ -244,20 +274,18 @@ function summarizePublishResult(pages, label) {
   const ok = total - failed.length;
 
   if (!failed.length) {
-    return formatCountLine(ok, total, label);
+    return formatCountLine(ok, total, label, 'language');
   }
 
   const previewFailed = failed.filter(isPreviewFailure);
   const publishFailed = failed.filter((p) => !isPreviewFailure(p));
-  const lines = [formatCountLine(ok, total, label)];
+  const lines = [formatCountLine(ok, total, label, 'language')];
 
   if (previewFailed.length) {
-    lines.push(
-      `Preview failed for ${formatFailureList(previewFailed, { usePreviewStatus: true })}, hence publish also failed`,
-    );
+    lines.push(...formatPublishSkippedLines(previewFailed));
   }
   if (publishFailed.length) {
-    lines.push(`Publish failed for ${formatFailureList(publishFailed)}`);
+    lines.push(...formatPublishFailedLines(publishFailed));
   }
 
   return lines.join('\n');
