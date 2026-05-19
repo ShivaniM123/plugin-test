@@ -101,12 +101,32 @@ export function liveUrlsFromPages(pages) {
   return pages.map((p) => p.resp?.live?.url).filter(Boolean);
 }
 
+function formatLocaleCode(locale) {
+  const s = String(locale ?? '').trim();
+  return s ? s.toLowerCase() : '?';
+}
+
+function pageErrorDetail(page) {
+  if (page?.error) return String(page.error);
+  if (page?.status) return `HTTP ${page.status}`;
+  return 'failed';
+}
+
 export function summarizeBulkResult(pages, label) {
-  const ok = pages.filter((p) => p.status === 200).length;
-  const total = pages.length;
+  const total = pages?.length ?? 0;
   if (!total) return `No pages to ${label}.`;
-  if (ok === total) return `${ok} of ${total} page(s) ${label}.`;
-  const failed = pages.find((p) => p.status !== 200);
-  const detail = failed?.error || (failed?.status ? `HTTP ${failed.status}` : '');
-  return `${ok} of ${total} page(s) ${label}.${detail ? ` (${detail})` : ''}`;
+
+  const failed = pages.filter((p) => p.status !== 200);
+  const ok = total - failed.length;
+
+  if (!failed.length) {
+    return `${ok} of ${total} page(s) ${label}.`;
+  }
+
+  const failedLangs = failed.map((p) => {
+    const lang = formatLocaleCode(p.locale);
+    return `${lang} (${pageErrorDetail(p)})`;
+  }).join(', ');
+
+  return `${ok} of ${total} page(s) ${label}. Failed: ${failedLangs}`;
 }

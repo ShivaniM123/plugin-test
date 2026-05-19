@@ -20,11 +20,11 @@ import {
   buildAemAdminPath,
   previewPages,
   publishPages,
-  liveUrlsFromPages,
   summarizeBulkResult,
 } from './aem-admin.js';
 
 const PRIMARY_LABEL_WITH_PICKER = 'Open page for selected language';
+const BULK_MESSAGE_DISMISS_MS = 3000;
 
 /** Always show locale codes in lowercase (avoids DA global strong { uppercase }). */
 const formatLocaleDisplay = (locale) => {
@@ -195,6 +195,10 @@ function setUi(ui, actions, opts = {}) {
     ui.publishAllBtn.onclick =
       showPublishAll && typeof publishAllClick === 'function' ? publishAllClick : null;
   }
+}
+
+function setPanelLoading(isLoading) {
+  document.querySelector('.ls-panel')?.classList.toggle('ls-loading', Boolean(isLoading));
 }
 
 function setPanelTwoLanguagesMode(isTwo) {
@@ -407,20 +411,10 @@ function resolveSitePath(contextPath, org, repo, segments) {
   return p;
 }
 
-function publishResultMessage(published) {
-  const liveUrls = liveUrlsFromPages(published);
-  if (!published?.length) return { text: '', isError: false };
-  if (!liveUrls.length) {
-    return { text: 'No pages published.', isError: true };
-  }
-  const n = liveUrls.length;
-  return { text: `${n} page(s) published.`, isError: false };
-}
-
 async function main() {
   const { context, actions, token } = await DA_SDK;
   const ui = getUi();
-  setPanelTwoLanguagesMode(false);
+  setPanelLoading(true);
   const aemFetch = createAemFetcher(actions, token);
 
   const pageUrl = contextToDaUrl({
@@ -458,16 +452,49 @@ async function main() {
     publishAllClick: null,
   };
 
+  let bulkMessageDismissTimer = null;
+
   const show = (patch = {}) => {
+    if (bulkMessageDismissTimer) {
+      clearTimeout(bulkMessageDismissTimer);
+      bulkMessageDismissTimer = null;
+    }
     uiState = { ...uiState, ...patch };
     setUi(ui, actions, uiState);
+
+    const msg = String(uiState.bulkMessage || '').trim();
+    if (msg && !uiState.bulkMessageIsLoading) {
+      bulkMessageDismissTimer = window.setTimeout(() => {
+        bulkMessageDismissTimer = null;
+        show({
+          bulkMessage: '',
+          bulkMessageIsError: false,
+          bulkMessageIsLoading: false,
+          bulkMessageIsSuccess: false,
+        });
+      }, BULK_MESSAGE_DISMISS_MS);
+    }
   };
 
-  show({ status: 'Loading placeholders…', showLangRow: false });
+  const finishLoading = (patch = {}) => {
+    setPanelLoading(false);
+    show({
+      bulkMessage: '',
+      bulkMessageIsLoading: false,
+      ...patch,
+    });
+  };
+
+  show({
+    status: '',
+    bulkMessage: 'Loading placeholders…',
+    bulkMessageIsLoading: true,
+    showLangRow: false,
+  });
 
   const parsed = parseCurrentPage(pageUrl);
   if (!parsed) {
-    show({ status: 'Could not parse this page (need /org/repo/locale/… in context.path).' });
+    finishLoading({ status: 'Could not parse this page (need /org/repo/locale/… in context.path).' });
     return;
   }
 
@@ -476,7 +503,7 @@ async function main() {
   const segments = [...parsed.segments];
 
   if (!segments.length) {
-    show({ status: 'Path must include a locale folder after org/repo.' });
+    finishLoading({ status: 'Path must include a locale folder after org/repo.' });
     return;
   }
 
@@ -496,7 +523,7 @@ async function main() {
       sitePath,
     );
   } catch (e) {
-    show({ status: `Could not load placeholders.json (${e.message}).` });
+    finishLoading({ status: `Could not load placeholders.json (${e.message}).` });
     return;
   }
 
@@ -504,7 +531,7 @@ async function main() {
   setPanelTwoLanguagesMode(langKeys.length === 2);
 
   if (!langKeys.length) {
-    show({
+    finishLoading({
       status: 'No path columns found in language-switcher (values should start with /, e.g. en, fr).',
     });
     return;
@@ -512,7 +539,9 @@ async function main() {
 
   const locIndex = findLocaleSegmentIndex(segments, langKeys);
   if (locIndex < 0) {
-    show({ status: `No folder in this path matches a language column (${langKeys.join(', ')}).` });
+    finishLoading({
+      status: `No folder in this path matches a language column (${langKeys.join(', ')}).`,
+    });
     return;
   }
 
@@ -550,6 +579,7 @@ async function main() {
   const bulkTargets = () => langKeys;
 
   const pageListForTargets = (targets) => targets.map((loc) => ({
+    locale: loc,
     path: buildAemAdminPath(org, repo, segmentsForLocale(loc)),
   }));
 
@@ -638,13 +668,12 @@ async function main() {
         });
         try {
           const published = await publishPages(pageListForTargets(targets), aemFetch);
-          const { text, isError } = publishResultMessage(published);
-          const ok = !isError && published.some((p) => p.status === 200);
+          const ok = published.length > 0 && published.every((p) => p.status === 200);
           show({
-            bulkMessage: text || summarizeBulkResult(published, 'published'),
+            bulkMessage: summarizeBulkResult(published, 'published'),
             ...resetBulkMessageFlags(),
             bulkMessageIsSuccess: ok,
-            bulkMessageIsError: isError || !ok,
+            bulkMessageIsError: !ok,
           });
         } catch (e) {
           show({
@@ -711,7 +740,7 @@ async function main() {
     });
   };
 
-  show({ status: '' });
+  finishLoading({ status: '' });
 
   if (showLangPicker) {
     initLangCombobox(ui, langKeys, fromLoc, applyDestination);
