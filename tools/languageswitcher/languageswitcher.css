@@ -114,10 +114,6 @@ body {
   border-radius: var(--radius-sm);
 }
 
-.ls-panel.ls-loading .content-card {
-  display: none;
-}
-
 .current-locale {
   margin: 0;
   padding: 8px 10px;
@@ -316,6 +312,7 @@ body {
   padding: 10px 12px;
   font-size: 12px;
   line-height: 1.45;
+  white-space: pre-line;
   color: var(--text-secondary);
   text-align: center;
   background: var(--surface-sunken);
