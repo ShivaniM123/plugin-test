@@ -24,6 +24,7 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --shadow-panel: 0 4px 16px rgb(0 0 0 / 8%), 0 0 1px rgb(0 0 0 / 6%);
+  --ls-feedback-font-size: 13px;
 }
 
 *,
@@ -99,7 +100,7 @@ body {
 .status {
   margin: 0;
   padding: 10px 12px;
-  font-size: 12px;
+  font-size: var(--ls-feedback-font-size);
   line-height: 1.45;
   color: var(--text-secondary);
   background: var(--surface-raised);
@@ -132,9 +133,9 @@ body {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--ls-feedback-font-size);
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.45;
   color: var(--accent);
 }
 
@@ -308,7 +309,7 @@ body {
 }
 
 .lang-select-option + .lang-select-option {
-  border-top: 1px solid #6e6e6e;
+  border-top: 0.2px solid #6e6e6e;
 }
 
 .lang-select-option:hover,
@@ -353,7 +354,8 @@ body {
 .bulk-message {
   margin: 0;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: var(--ls-feedback-font-size);
+  font-weight: 400;
   line-height: 1.45;
   white-space: pre-line;
   color: var(--text-secondary);
@@ -364,9 +366,16 @@ body {
 }
 
 .bulk-message.is-loading {
+  font-size: var(--ls-feedback-font-size);
+  font-weight: 600;
   color: var(--accent);
   background: var(--accent-soft);
   border-color: rgb(20 115 230 / 22%);
+}
+
+.bulk-message.is-success,
+.bulk-message.is-error {
+  font-size: var(--ls-feedback-font-size);
 }
 
 .bulk-message.is-loading::before {
