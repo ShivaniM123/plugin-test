@@ -63,6 +63,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   padding: 16px;
 }
 
@@ -70,11 +71,11 @@ body {
   width: 100%;
   max-width: 420px;
   max-height: 100%;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+  justify-content: center;
   overflow: hidden;
 }
 
@@ -127,11 +128,10 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   box-sizing: border-box;
-  width: 100%;
-  min-height: 72px;
-  padding: 16px;
+  margin: 0;
+  padding: 0;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
@@ -139,8 +139,8 @@ body {
 }
 
 .ls-loading-spinner {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border: 2px solid currentcolor;
   border-top-color: transparent;
   border-radius: 50%;
@@ -148,12 +148,24 @@ body {
 }
 
 .ls-panel.ls-loading .app-main {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
   gap: 0;
-  min-height: 72px;
+  width: auto;
+  min-height: 0;
+  padding: 10px 16px;
+  border-width: 2px;
 }
 
 .ls-panel.ls-loading .ls-loading-compact {
   display: flex;
+}
+
+.ls-panel.ls-minimal .app-main {
+  width: 100%;
 }
 
 .current-locale {
@@ -296,7 +308,7 @@ body {
 }
 
 .lang-select-option + .lang-select-option {
-  border-top: 2px solid var(--s2-gray-700, #6e6e6e);
+  border-top: 1px solid #6e6e6e;
 }
 
 .lang-select-option:hover,
@@ -456,6 +468,7 @@ body {
 }
 
 /* Panel loading — after component layout rules */
+.ls-panel.ls-loading .status,
 .ls-panel.ls-loading .content-card,
 .ls-panel.ls-loading .bulk-footer,
 .ls-panel.ls-loading .bulk-actions-row {
