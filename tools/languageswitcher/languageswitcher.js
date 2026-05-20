@@ -166,6 +166,13 @@ function setUi(ui, actions, opts = {}) {
   ui.statusEl.hidden = !String(status || '').trim();
   ui.statusEl.classList.toggle('is-warning', Boolean(String(status || '').trim() && statusIsWarning));
   if (ui.contentCardEl) ui.contentCardEl.hidden = !showContentCard;
+  const panel = document.querySelector('.ls-panel');
+  if (panel) {
+    panel.classList.toggle(
+      'ls-minimal',
+      Boolean(String(status || '').trim() && !showContentCard),
+    );
+  }
   ui.langRow.hidden = !showLangRow;
   setCurrentLocale(ui, currentLocale);
   setBulkMessage(ui, bulkMessage, {
@@ -396,8 +403,8 @@ function initLangCombobox(ui, keys, currentKey, onPickLocale) {
     langComboboxOutsideCloseWired = true;
   }
 
-  setTriggerLabel(null);
-  onPickLocale(null);
+  setTriggerLabel(first);
+  onPickLocale(first);
 }
 
 function buildDest(parsed, org, repo, newSegments, useBranch, tier, target, daView) {
@@ -876,17 +883,6 @@ async function main() {
   }
 
   const applyDestination = (toLoc) => {
-    if (!toLoc) {
-      show({
-        status: '',
-        canOpen: true,
-        openUrl: null,
-        openDisabled: true,
-        showLangRow: showLangPicker,
-        openPrimaryLabel: PRIMARY_LABEL_WITH_PICKER,
-      });
-      return;
-    }
     if (toLoc.toLowerCase() === fromLoc.toLowerCase()) {
       show({
         status: '',
