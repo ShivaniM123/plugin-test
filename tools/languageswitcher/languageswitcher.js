@@ -403,7 +403,7 @@ function initLangCombobox(ui, keys, currentKey, onPickLocale) {
     langComboboxOutsideCloseWired = true;
   }
 
-  setTriggerLabel(first);
+  setTriggerLabel(null);
   onPickLocale(first);
 }
 
