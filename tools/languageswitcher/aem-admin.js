@@ -226,25 +226,35 @@ function formatCountLine(ok, total, label, unit = 'page') {
   return `${ok} of ${total} ${unit}(s) ${label}.`;
 }
 
-/** Preview bulk — e.g. "en, sp (HTTP 404)" */
-function formatFailureList(pages, opts = {}) {
-  return [...groupPagesByError(pages, opts).entries()]
-    .map(([detail, langs]) => `${langs.join(', ')} (${detail})`)
-    .join('; ');
+function formatLocalePathList(localeCodes) {
+  return localeCodes
+    .map((loc) => (String(loc).startsWith('/') ? loc : `/${loc}`))
+    .join(', ');
+}
+
+function formatPreviewFailedLines(pages) {
+  return [...groupPagesByError(pages).entries()].map(([detail, langs]) => {
+    const paths = formatLocalePathList(langs);
+    const reason = formatFriendlyReason(detail);
+    return `Could not preview ${paths} — ${reason}.`;
+  });
 }
 
 function formatPublishSkippedLines(pages) {
   return [...groupPagesByError(pages, { usePreviewStatus: true }).entries()]
-    .map(([detail, langs]) => (
-      `Publish skipped for ${langs.join(', ')} — preview failed (${formatFriendlyReason(detail)}).`
-    ));
+    .map(([detail, langs]) => {
+      const paths = formatLocalePathList(langs);
+      const reason = formatFriendlyReason(detail);
+      return `Publish skipped for ${paths} — preview failed (${reason}).`;
+    });
 }
 
 function formatPublishFailedLines(pages) {
-  return [...groupPagesByError(pages).entries()]
-    .map(([detail, langs]) => (
-      `Publish failed for ${langs.join(', ')} (${formatFriendlyReason(detail)}).`
-    ));
+  return [...groupPagesByError(pages).entries()].map(([detail, langs]) => {
+    const paths = formatLocalePathList(langs);
+    const reason = formatFriendlyReason(detail);
+    return `Could not publish ${paths} — ${reason}.`;
+  });
 }
 
 function isPreviewFailure(page) {
@@ -255,6 +265,10 @@ function isPreviewFailure(page) {
 function pageDeniedStatus(page) {
   if (isPreviewFailure(page) && page.previewStatus) return page.previewStatus;
   return page.status;
+}
+
+function isAuthFailure(page) {
+  return isAccessDeniedStatus(pageDeniedStatus(page));
 }
 
 export function allPagesAccessDenied(pages) {
@@ -268,13 +282,17 @@ export function permissionDeniedMessage(action) {
   return `You don't have permission to ${verb}. Contact your administrator.`;
 }
 
-function summarizePublishResult(pages, label) {
+function summarizePublishResult(pages, label, action = 'publish') {
   const total = pages?.length ?? 0;
   const failed = pages.filter((p) => p.status !== 200);
   const ok = total - failed.length;
 
   if (!failed.length) {
     return formatCountLine(ok, total, label, 'language');
+  }
+
+  if (failed.some(isAuthFailure)) {
+    return permissionDeniedMessage(action);
   }
 
   const previewFailed = failed.filter(isPreviewFailure);
@@ -295,10 +313,6 @@ export function summarizeBulkResult(pages, label, action = 'preview') {
   const total = pages?.length ?? 0;
   if (!total) return `No pages to ${label.replace(/ed$/, '')}.`;
 
-  if (allPagesAccessDenied(pages)) {
-    return permissionDeniedMessage(action);
-  }
-
   const failed = pages.filter((p) => p.status !== 200);
   const ok = total - failed.length;
 
@@ -306,9 +320,14 @@ export function summarizeBulkResult(pages, label, action = 'preview') {
     return formatCountLine(ok, total, label);
   }
 
-  if (action === 'publish') {
-    return summarizePublishResult(pages, label);
+  if (allPagesAccessDenied(pages) || failed.some(isAuthFailure)) {
+    return permissionDeniedMessage(action);
   }
 
-  return `${formatCountLine(ok, total, label)}\nPreview failed for ${formatFailureList(failed)}`;
+  if (action === 'publish') {
+    return summarizePublishResult(pages, label, action);
+  }
+
+  const lines = [formatCountLine(ok, total, label), ...formatPreviewFailedLines(failed)];
+  return lines.join('\n');
 }
