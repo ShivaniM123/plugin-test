@@ -14,7 +14,12 @@
         <main class="app-main">
           <p id="status" class="status" role="status" hidden></p>
 
-          <div class="content-card">
+          <div class="ls-loading-compact" role="status" aria-live="polite" aria-busy="true">
+            <span class="ls-loading-spinner" aria-hidden="true"></span>
+            Loading…
+          </div>
+
+          <div id="contentCard" class="content-card">
             <p id="currentLocale" class="current-locale" hidden>
               Current page language: <span id="currentLocaleValue" class="current-locale-code"></span>
             </p>
@@ -56,14 +61,12 @@
             </div>
           </div>
 
-          <footer class="bulk-footer" id="bulkFooter">
+          <footer class="bulk-footer" id="bulkFooter" hidden>
             <div class="bulk-actions-row">
               <button type="button" id="previewAll" class="btn btn-outline">Preview All</button>
               <button type="button" id="publishAll" class="btn btn-outline">Publish All</button>
             </div>
-            <p id="bulkMessage" class="bulk-message is-loading" role="status" aria-live="polite">
-              Loading…
-            </p>
+            <p id="bulkMessage" class="bulk-message" role="status" aria-live="polite" hidden></p>
           </footer>
         </main>
       </div>

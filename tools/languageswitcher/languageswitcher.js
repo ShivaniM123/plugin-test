@@ -31,6 +31,7 @@ import {
 } from './da-permissions.js';
 
 const PRIMARY_LABEL_WITH_PICKER = 'Open page for selected language';
+const LANG_SELECT_PLACEHOLDER = 'Select…';
 const BULK_MESSAGE_SUCCESS_DISMISS_MS = 5000;
 
 /** Always show locale codes in lowercase (avoids DA global strong { uppercase }). */
@@ -62,6 +63,7 @@ function pickDaView(context) {
 function getUi() {
   return {
     statusEl: document.getElementById('status'),
+    contentCardEl: document.getElementById('contentCard'),
     bulkMessageEl: document.getElementById('bulkMessage'),
     bulkFooter: document.getElementById('bulkFooter'),
     actionsEl: document.getElementById('actions'),
@@ -106,10 +108,6 @@ function openUrlsInNewTabs(urls) {
   });
 }
 
-function scheduleCloseLibrary(actions) {
-  if (typeof actions?.closeLibrary === 'function') window.setTimeout(() => actions.closeLibrary(), 300);
-}
-
 function setBulkMessage(ui, text, opts = {}) {
   if (!ui.bulkMessageEl) return;
   const msg = String(text || '').trim();
@@ -143,10 +141,12 @@ function setCurrentLocale(ui, locale) {
 function setUi(ui, actions, opts = {}) {
   const {
     status = '',
+    statusIsWarning = false,
     bulkMessage = '',
     bulkMessageIsError = false,
     openUrl = null,
     canOpen = false,
+    showContentCard = true,
     showLangRow = false,
     showOpenAll = false,
     showPreviewAll = true,
@@ -164,6 +164,8 @@ function setUi(ui, actions, opts = {}) {
 
   ui.statusEl.textContent = status;
   ui.statusEl.hidden = !String(status || '').trim();
+  ui.statusEl.classList.toggle('is-warning', Boolean(String(status || '').trim() && statusIsWarning));
+  if (ui.contentCardEl) ui.contentCardEl.hidden = !showContentCard;
   ui.langRow.hidden = !showLangRow;
   setCurrentLocale(ui, currentLocale);
   setBulkMessage(ui, bulkMessage, {
@@ -174,7 +176,10 @@ function setUi(ui, actions, opts = {}) {
 
   const showActions = canOpen || showOpenAll;
   ui.actionsEl.hidden = !showActions;
-  if (ui.bulkFooter) ui.bulkFooter.hidden = !showPreviewAll && !showPublishAll && !bulkMessage;
+  const panelLoading = document.querySelector('.ls-panel')?.classList.contains('ls-loading');
+  if (ui.bulkFooter) {
+    ui.bulkFooter.hidden = panelLoading || (!showPreviewAll && !showPublishAll && !bulkMessage);
+  }
 
   ui.openBtn.hidden = !canOpen;
   ui.openBtn.disabled = !canOpen || openDisabled;
@@ -182,7 +187,6 @@ function setUi(ui, actions, opts = {}) {
   ui.openBtn.onclick = () => {
     if (!openUrl) return;
     openUrlsInNewTabs([openUrl]);
-    scheduleCloseLibrary(actions);
   };
 
   ui.openAllBtn.hidden = !showOpenAll;
@@ -205,7 +209,13 @@ function setUi(ui, actions, opts = {}) {
 }
 
 function setPanelLoading(isLoading) {
-  document.querySelector('.ls-panel')?.classList.toggle('ls-loading', Boolean(isLoading));
+  const panel = document.querySelector('.ls-panel');
+  const compact = document.querySelector('.ls-loading-compact');
+  if (!panel) return;
+  const loading = Boolean(isLoading);
+  panel.classList.toggle('ls-loading', loading);
+  panel.setAttribute('aria-busy', loading ? 'true' : 'false');
+  if (compact) compact.setAttribute('aria-busy', loading ? 'true' : 'false');
 }
 
 function setPanelTwoLanguagesMode(isTwo) {
@@ -338,7 +348,10 @@ function initLangCombobox(ui, keys, currentKey, onPickLocale) {
   };
 
   const setTriggerLabel = (loc) => {
-    if (ui.langValue) ui.langValue.textContent = formatLocaleDisplay(loc);
+    if (!ui.langValue) return;
+    const picked = typeof loc === 'string' && loc.trim();
+    ui.langValue.textContent = picked ? formatLocaleDisplay(loc) : LANG_SELECT_PLACEHOLDER;
+    ui.langValue.classList.toggle('is-placeholder', !picked);
   };
 
   ui.langMenu.replaceChildren();
@@ -383,8 +396,8 @@ function initLangCombobox(ui, keys, currentKey, onPickLocale) {
     langComboboxOutsideCloseWired = true;
   }
 
-  setTriggerLabel(first);
-  onPickLocale(first);
+  setTriggerLabel(null);
+  onPickLocale(null);
 }
 
 function buildDest(parsed, org, repo, newSegments, useBranch, tier, target, daView) {
@@ -673,6 +686,13 @@ async function main() {
     }
   };
 
+  const statusOnlyUi = {
+    showContentCard: false,
+    showLangRow: false,
+    showPreviewAll: false,
+    showPublishAll: false,
+  };
+
   const finishLoading = (patch = {}) => {
     setPanelLoading(false);
     show({
@@ -689,16 +709,20 @@ async function main() {
   setPanelLoading(true);
   show({
     status: '',
-    bulkMessage: 'Loading…',
-    bulkMessageIsLoading: true,
+    bulkMessage: '',
     showLangRow: false,
     showPreviewAll: false,
     showPublishAll: false,
+    ...resetBulkMessageFlags(),
   });
 
   const parsed = parseCurrentPage(pageUrl);
   if (!parsed) {
-    finishLoading({ status: 'Could not parse this page (need /org/repo/locale/… in context.path).' });
+    finishLoading({
+      status: 'Could not read this page path. Open Language Switcher from a document under org/repo/locale/…',
+      statusIsWarning: true,
+      ...statusOnlyUi,
+    });
     return;
   }
 
@@ -707,7 +731,11 @@ async function main() {
   const segments = [...parsed.segments];
 
   if (!segments.length) {
-    finishLoading({ status: 'Path must include a locale folder after org/repo.' });
+    finishLoading({
+      status: 'This path has no locale folder after org/repo. Open a page such as /en/… or /fr/…',
+      statusIsWarning: true,
+      ...statusOnlyUi,
+    });
     return;
   }
 
@@ -727,7 +755,11 @@ async function main() {
       sitePath,
     );
   } catch (e) {
-    finishLoading({ status: `Could not load placeholders.json (${e.message}).` });
+    finishLoading({
+      status: `Could not load placeholders.json (${e.message}).`,
+      statusIsWarning: true,
+      ...statusOnlyUi,
+    });
     return;
   }
 
@@ -736,15 +768,20 @@ async function main() {
 
   if (!langKeys.length) {
     finishLoading({
-      status: 'No path columns found in language-switcher (values should start with /, e.g. en, fr).',
+      status: 'No language paths in placeholders. Add columns whose values start with / (e.g. en, fr).',
+      statusIsWarning: true,
+      ...statusOnlyUi,
     });
     return;
   }
 
   const locIndex = findLocaleSegmentIndex(segments, langKeys);
   if (locIndex < 0) {
+    const langs = langKeys.join(', ');
     finishLoading({
-      status: `No folder in this path matches a language column (${langKeys.join(', ')}).`,
+      status: `This page is not in a language folder. Open a document under ${langs} to use Language Switcher.`,
+      statusIsWarning: true,
+      ...statusOnlyUi,
     });
     return;
   }
@@ -807,7 +844,6 @@ async function main() {
         : targets;
       const urls = others.map(urlForLocale);
       openUrlsInNewTabs(urls);
-      if (urls.length) scheduleCloseLibrary(actions);
     },
   });
 
@@ -840,6 +876,17 @@ async function main() {
   }
 
   const applyDestination = (toLoc) => {
+    if (!toLoc) {
+      show({
+        status: '',
+        canOpen: true,
+        openUrl: null,
+        openDisabled: true,
+        showLangRow: showLangPicker,
+        openPrimaryLabel: PRIMARY_LABEL_WITH_PICKER,
+      });
+      return;
+    }
     if (toLoc.toLowerCase() === fromLoc.toLowerCase()) {
       show({
         status: '',
