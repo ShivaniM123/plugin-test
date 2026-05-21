@@ -186,7 +186,7 @@ function setUi(ui, actions, opts = {}) {
 
   ui.actionsEl.hidden = !showContentCard;
   ui.openBtn.hidden = !showContentCard;
-  ui.openBtn.disabled = !showContentCard || openDisabled;
+  ui.openBtn.disabled = !showContentCard || !canOpen || openDisabled;
   setOpenLabel(ui, openPrimaryLabel);
   ui.openBtn.onclick = () => {
     if (!openUrl) return;
