@@ -14,17 +14,12 @@
         <main class="app-main">
           <p id="status" class="status" role="status" hidden></p>
 
-          <div class="ls-loading-compact" role="status" aria-live="polite" aria-busy="true">
-            <span class="ls-loading-spinner" aria-hidden="true"></span>
-            Loading…
-          </div>
-
           <div id="contentCard" class="content-card">
             <p id="currentLocale" class="current-locale" hidden>
               Current page language: <span id="currentLocaleValue" class="current-locale-code"></span>
             </p>
 
-            <section id="langRow" class="lang-section" hidden>
+            <section id="langRow" class="lang-section">
               <label class="field-label" id="langSelectLabel" for="langSelectTrigger">
                 Select language
               </label>
@@ -51,7 +46,7 @@
               </div>
             </section>
 
-            <div class="actions-panel" id="actions" hidden>
+            <div class="actions-panel" id="actions">
               <button type="button" id="open" class="btn btn-primary">
                 <span id="openLabel">Open page for selected language</span>
               </button>
@@ -61,7 +56,7 @@
             </div>
           </div>
 
-          <footer class="bulk-footer" id="bulkFooter" hidden>
+          <footer class="bulk-footer" id="bulkFooter">
             <div class="bulk-actions-row">
               <button type="button" id="previewAll" class="btn btn-outline">Preview All</button>
               <button type="button" id="publishAll" class="btn btn-outline">Publish All</button>

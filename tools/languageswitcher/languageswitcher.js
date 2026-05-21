@@ -167,11 +167,9 @@ function setUi(ui, actions, opts = {}) {
   ui.statusEl.classList.toggle('is-warning', Boolean(String(status || '').trim() && statusIsWarning));
   if (ui.contentCardEl) ui.contentCardEl.hidden = !showContentCard;
   const panel = document.querySelector('.ls-panel');
+  const statusVisible = Boolean(String(status || '').trim());
   if (panel) {
-    panel.classList.toggle(
-      'ls-minimal',
-      Boolean(String(status || '').trim() && !showContentCard),
-    );
+    panel.classList.toggle('ls-minimal', Boolean(statusVisible && !showContentCard));
   }
   ui.langRow.hidden = !showLangRow;
   setCurrentLocale(ui, currentLocale);
@@ -181,15 +179,14 @@ function setUi(ui, actions, opts = {}) {
     isSuccess: bulkMessageIsSuccess,
   });
 
-  const showActions = canOpen || showOpenAll;
-  ui.actionsEl.hidden = !showActions;
-  const panelLoading = document.querySelector('.ls-panel')?.classList.contains('ls-loading');
   if (ui.bulkFooter) {
-    ui.bulkFooter.hidden = panelLoading || (!showPreviewAll && !showPublishAll && !bulkMessage);
+    ui.bulkFooter.hidden = !showContentCard
+      || (!showPreviewAll && !showPublishAll && !bulkMessage);
   }
 
-  ui.openBtn.hidden = !canOpen;
-  ui.openBtn.disabled = !canOpen || openDisabled;
+  ui.actionsEl.hidden = !showContentCard;
+  ui.openBtn.hidden = !showContentCard;
+  ui.openBtn.disabled = !showContentCard || !canOpen || openDisabled;
   setOpenLabel(ui, openPrimaryLabel);
   ui.openBtn.onclick = () => {
     if (!openUrl) return;
@@ -213,40 +210,6 @@ function setUi(ui, actions, opts = {}) {
     ui.publishAllBtn.onclick =
       showPublishAll && typeof publishAllClick === 'function' ? publishAllClick : null;
   }
-}
-
-const LOADING_SPINNER_DELAY_MS = 200;
-let panelLoadingDelayTimer = null;
-
-function setPanelLoading(isLoading) {
-  const panel = document.querySelector('.ls-panel');
-  const compact = document.querySelector('.ls-loading-compact');
-  if (!panel) return;
-  const loading = Boolean(isLoading);
-  panel.classList.toggle('ls-loading', loading);
-  panel.setAttribute('aria-busy', loading ? 'true' : 'false');
-  if (compact) compact.setAttribute('aria-busy', loading ? 'true' : 'false');
-}
-
-function clearPanelLoadingDelay() {
-  if (panelLoadingDelayTimer) {
-    clearTimeout(panelLoadingDelayTimer);
-    panelLoadingDelayTimer = null;
-  }
-}
-
-/** Avoid a loading flash when placeholders/permissions resolve quickly (e.g. cache hit). */
-function startPanelLoadingDeferred() {
-  clearPanelLoadingDelay();
-  panelLoadingDelayTimer = setTimeout(() => {
-    panelLoadingDelayTimer = null;
-    setPanelLoading(true);
-  }, LOADING_SPINNER_DELAY_MS);
-}
-
-function finishPanelLoading() {
-  clearPanelLoadingDelay();
-  setPanelLoading(false);
 }
 
 function setPanelTwoLanguagesMode(isTwo) {
@@ -725,8 +688,9 @@ async function main() {
   };
 
   const finishLoading = (patch = {}) => {
-    finishPanelLoading();
     show({
+      showContentCard: true,
+      bulkDisabled: false,
       bulkMessage: '',
       bulkMessageIsLoading: false,
       showPreviewAll: true,
@@ -737,16 +701,24 @@ async function main() {
     });
   };
 
-  startPanelLoadingDeferred();
   show({
     status: '',
     bulkMessage: '',
-    showContentCard: false,
-    showLangRow: false,
-    showPreviewAll: false,
-    showPublishAll: false,
+    showContentCard: true,
+    showLangRow: true,
+    showPreviewAll: true,
+    showPublishAll: true,
+    canOpen: true,
+    openDisabled: true,
+    bulkDisabled: true,
+    previewAllClick,
+    publishAllClick,
     ...resetBulkMessageFlags(),
   });
+  if (ui.langValue) {
+    ui.langValue.textContent = LANG_SELECT_PLACEHOLDER;
+    ui.langValue.classList.add('is-placeholder');
+  }
 
   const parsed = parseCurrentPage(pageUrl);
   if (!parsed) {
@@ -864,6 +836,7 @@ async function main() {
   bulkCtx.pageListForTargets = pageListForTargets;
 
   show({
+    showContentCard: true,
     currentLocale: fromLoc || urlSeg,
     showLangRow: showLangPicker,
     showOpenAll: langKeys.length > 2,
