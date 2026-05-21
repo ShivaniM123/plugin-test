@@ -18,6 +18,7 @@
   --danger-soft: rgb(215 55 63 / 12%);
   --success: #12805c;
   --success-soft: rgb(18 128 92 / 12%);
+  --seagreen: #82cca2;
   --warning: #b45309;
   --warning-soft: rgb(245 158 11 / 18%);
   --warning-border: rgb(217 119 6 / 45%);
@@ -88,7 +89,7 @@ body {
   gap: 14px;
   padding: 16px 18px 18px;
   border-radius: var(--radius-md);
-  border: 3px solid var(--s2-blue-700);
+  border: 3px solid black;
   background-color: white;
 }
 
@@ -474,6 +475,12 @@ body {
 .btn-outline:hover:not(:disabled) {
   color: #fff;
   background-color: var(--accent);
+}
+
+.bulk-actions-row .btn-outline:hover:not(:disabled) {
+  color: var(--seagreen);
+  background-color: var(--surface);
+  border-color: var(--seagreen);
 }
 
 /* Panel loading — after component layout rules */
