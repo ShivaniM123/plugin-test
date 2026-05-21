@@ -74,7 +74,7 @@ tools/languageswitcher/
 
 ## Loading
 
-When the tool opens—on a page **inside** or **outside** a language folder—it shows a compact **Loading…** spinner while `placeholders.json` is fetched and validated (after a short delay to avoid a flash on cache hits). Then it shows either the full Language Mapper UI or the appropriate warning/error message.
+When the tool opens—on a page **inside** or **outside** a language folder—it shows a compact **Loading…** spinner immediately (from the first paint of the dialog), while `placeholders.json` is fetched and validated. Then it shows either the full Language Mapper UI or the appropriate warning/error message.
 
 ## Edge Cases Handled
 
