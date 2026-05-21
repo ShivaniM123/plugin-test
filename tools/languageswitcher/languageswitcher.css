@@ -90,8 +90,9 @@ body {
   gap: 14px;
   padding: 16px 18px 18px;
   border-radius: var(--radius-md);
-  border: 3px solid black;
-  background-color: white;
+  background: var(--surface);
+  border: 1px solid var(--border-quiet);
+  box-shadow: var(--shadow-panel);
 }
 
 .ls-panel-two-languages .app-main {
@@ -300,20 +301,28 @@ body {
 }
 
 .ls-panel.ls-pending .content-card,
-.ls-panel.ls-pending .bulk-footer {
+.ls-panel.ls-pending .bulk-footer,
+.ls-panel.ls-minimal .content-card,
+.ls-panel.ls-minimal .bulk-footer {
   display: none;
-}
-
-.ls-panel.ls-pending .app-main {
-  min-height: 240px;
 }
 
 .ls-panel.ls-minimal .app-main {
   width: 100%;
+  min-height: 0;
+  padding: 16px 18px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border-quiet);
+  box-shadow: var(--shadow-panel);
 }
 
-.ls-panel.ls-minimal.ls-pending .app-main {
+/* Loading: no empty card — shell stays invisible until finishLoading */
+.ls-panel.ls-pending:not(.ls-minimal) .app-main {
   min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .footer-hint {
@@ -456,7 +465,7 @@ body {
 }
 
 .bulk-actions-row .btn-outline:hover:not(:disabled) {
-  color: var(--seagreen-text);
+  color: #fff;
   background-color: var(--seagreen);
   border-color: var(--seagreen);
 }

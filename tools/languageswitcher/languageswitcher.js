@@ -172,8 +172,9 @@ function setUi(ui, actions, opts = {}) {
   const panel = document.querySelector('.ls-panel');
   const statusVisible = Boolean(String(status || '').trim());
   if (panel) {
-    panel.classList.toggle('ls-minimal', Boolean(statusVisible && !showContentCard));
-    panel.classList.toggle('ls-pending', !showContentCard);
+    const statusOnly = statusVisible && !showContentCard;
+    panel.classList.toggle('ls-minimal', statusOnly);
+    panel.classList.toggle('ls-pending', !showContentCard && !statusVisible);
   }
   ui.langRow.hidden = !showLangRow;
   setCurrentLocale(ui, currentLocale);
@@ -555,6 +556,13 @@ async function main() {
       }, BULK_MESSAGE_SUCCESS_DISMISS_MS);
     }
   };
+
+  show({
+    showContentCard: false,
+    showLangRow: false,
+    showPreviewAll: false,
+    showPublishAll: false,
+  });
 
   const previewAllClick = async () => {
     if (!bulkCtx.ready) {
