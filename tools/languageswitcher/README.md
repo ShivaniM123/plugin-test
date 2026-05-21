@@ -72,16 +72,21 @@ tools/languageswitcher/
 | ----- | ---- | ---- | ---------- |
 | `Language Switcher` | `/tools/languageswitcher/languageswitcher.html` | `https://main--<repo>--<org>.aem.page/tools/languageswitcher/icons/language-icon.svg` | `dialog` |
 
+## Loading
+
+When the tool opens—on a page **inside** or **outside** a language folder—it shows a compact **Loading…** spinner while `placeholders.json` is fetched and validated (after a short delay to avoid a flash on cache hits). Then it shows either the full Language Mapper UI or the appropriate warning/error message.
+
 ## Edge Cases Handled
 
 1. Pages Outside Language Folder Structure: 
-The plugin requires the current page to exist inside a supported locale folder structure (example: /en/, /fr/, /de/). If the page is outside any configured language folder, the modal displays an appropriate validation/error message.
+The plugin requires the current page to exist inside a supported locale folder structure (example: /en/, /fr/, /de/). If the page is outside any configured language folder, the modal displays an appropriate validation/error message (after the same loading step used on valid locale pages).
 
 ![Outside Language Folder:](error1.png)
 
 2. Missing Corresponding Localized Pages: 
 If corresponding localized pages (example: en ↔ fr) do not exist, the plugin detects the missing page during preview/publish validation.
 
+![Missing pages:](error2.png)
 
 3. Preview/Publish Access & Validation Errors: 
 During preview/publish operations, the plugin validates access for every localized page. If any operation fails, corresponding status/error messages are displayed for that specific language page.
