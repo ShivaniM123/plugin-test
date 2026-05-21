@@ -503,8 +503,8 @@ body {
 
 .bulk-actions-row .btn-outline:hover:not(:disabled) {
   color: #fff;
-  background-color: var(--seagreen);
-  border-color: var(--seagreen);
+  background-color: #045a29;
+  border-color: #045a29;
 }
 
 /* Panel loading — after component layout rules */
