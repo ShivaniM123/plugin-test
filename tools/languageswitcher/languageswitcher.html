@@ -10,11 +10,11 @@
   </head>
   <body>
     <div class="ls-shell">
-      <div class="ls-panel ls-pending" role="region" aria-label="Language Switcher">
+      <div class="ls-panel" role="region" aria-label="Language Switcher">
         <main class="app-main">
           <p id="status" class="status" role="status" hidden></p>
 
-          <div id="contentCard" class="content-card">
+          <div id="contentCard" class="content-card" hidden>
             <p id="currentLocale" class="current-locale" hidden>
               Current page language: <span id="currentLocaleValue" class="current-locale-code"></span>
             </p>
@@ -56,7 +56,7 @@
             </div>
           </div>
 
-          <footer class="bulk-footer" id="bulkFooter">
+          <footer class="bulk-footer" id="bulkFooter" hidden>
             <div class="bulk-actions-row">
               <button type="button" id="previewAll" class="btn btn-outline">Preview All</button>
               <button type="button" id="publishAll" class="btn btn-outline">Publish All</button>
