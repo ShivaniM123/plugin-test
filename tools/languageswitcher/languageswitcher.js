@@ -28,6 +28,7 @@ import {
   permissionDeniedMessageForAccess,
   permissionDeniedMessageForPreview,
   permissionDeniedMessageForPublish,
+  publishDeniedHoverHint,
 } from './da-permissions.js';
 
 const PRIMARY_LABEL_WITH_PICKER = 'Open page for selected language';
@@ -160,6 +161,8 @@ function setUi(ui, actions, opts = {}) {
     publishAllClick,
     bulkMessageIsLoading = false,
     bulkMessageIsSuccess = false,
+    toolAccess = null,
+    hasAemFetch = false,
   } = opts;
 
   ui.statusEl.textContent = status;
@@ -170,6 +173,7 @@ function setUi(ui, actions, opts = {}) {
   const statusVisible = Boolean(String(status || '').trim());
   if (panel) {
     panel.classList.toggle('ls-minimal', Boolean(statusVisible && !showContentCard));
+    panel.classList.toggle('ls-pending', !showContentCard);
   }
   ui.langRow.hidden = !showLangRow;
   setCurrentLocale(ui, currentLocale);
@@ -197,18 +201,29 @@ function setUi(ui, actions, opts = {}) {
   ui.openAllBtn.disabled = false;
   ui.openAllBtn.onclick = showOpenAll && typeof openAllClick === 'function' ? openAllClick : null;
 
+  const previewAllowed = !bulkDisabled && hasAemFetch && Boolean(toolAccess?.canPreview);
+  const publishAllowed = !bulkDisabled && hasAemFetch && Boolean(toolAccess?.canPublish);
+
   if (ui.previewAllBtn) {
     ui.previewAllBtn.hidden = !showPreviewAll;
-    ui.previewAllBtn.disabled = bulkDisabled;
-    ui.previewAllBtn.onclick =
-      showPreviewAll && typeof previewAllClick === 'function' ? previewAllClick : null;
+    ui.previewAllBtn.disabled = !previewAllowed;
+    ui.previewAllBtn.title = previewAllowed
+      ? ''
+      : permissionDeniedMessageForPreview();
+    ui.previewAllBtn.onclick = previewAllowed && typeof previewAllClick === 'function'
+      ? previewAllClick
+      : null;
   }
 
   if (ui.publishAllBtn) {
     ui.publishAllBtn.hidden = !showPublishAll;
-    ui.publishAllBtn.disabled = bulkDisabled;
-    ui.publishAllBtn.onclick =
-      showPublishAll && typeof publishAllClick === 'function' ? publishAllClick : null;
+    ui.publishAllBtn.disabled = !publishAllowed;
+    ui.publishAllBtn.title = publishAllowed
+      ? ''
+      : publishDeniedHoverHint();
+    ui.publishAllBtn.onclick = publishAllowed && typeof publishAllClick === 'function'
+      ? publishAllClick
+      : null;
   }
 }
 
@@ -499,6 +514,7 @@ async function main() {
   const bulkCtx = {
     ready: false,
     toolAccess: null,
+    hasAemFetch: Boolean(aemFetch),
     targets: [],
     pageListForTargets: () => [],
     lastPreviewByLocale: {},
@@ -687,38 +703,26 @@ async function main() {
     showPublishAll: false,
   };
 
+  const readyUi = (toolAccess) => ({
+    showContentCard: true,
+    showPreviewAll: true,
+    showPublishAll: true,
+    bulkDisabled: false,
+    hasAemFetch: Boolean(aemFetch),
+    toolAccess,
+    previewAllClick,
+    publishAllClick,
+  });
+
   const finishLoading = (patch = {}) => {
+    const access = patch.toolAccess ?? bulkCtx.toolAccess;
     show({
-      showContentCard: true,
-      bulkDisabled: false,
       bulkMessage: '',
       bulkMessageIsLoading: false,
-      showPreviewAll: true,
-      showPublishAll: true,
-      previewAllClick,
-      publishAllClick,
+      ...readyUi(access),
       ...patch,
     });
   };
-
-  show({
-    status: '',
-    bulkMessage: '',
-    showContentCard: true,
-    showLangRow: true,
-    showPreviewAll: true,
-    showPublishAll: true,
-    canOpen: true,
-    openDisabled: true,
-    bulkDisabled: true,
-    previewAllClick,
-    publishAllClick,
-    ...resetBulkMessageFlags(),
-  });
-  if (ui.langValue) {
-    ui.langValue.textContent = LANG_SELECT_PLACEHOLDER;
-    ui.langValue.classList.add('is-placeholder');
-  }
 
   const parsed = parseCurrentPage(pageUrl);
   if (!parsed) {
@@ -760,7 +764,7 @@ async function main() {
     );
   } catch (e) {
     finishLoading({
-      status: `Could not load placeholders.json (${e.message}).`,
+      status: String(e?.message || e || 'Could not find placeholders.json.'),
       statusIsWarning: true,
       ...statusOnlyUi,
     });
@@ -769,10 +773,11 @@ async function main() {
 
   const langKeys = detectLocaleColumnKeys(rows);
   setPanelTwoLanguagesMode(langKeys.length === 2);
+  const sheetLabel = placeholderSheetName || DEFAULT_SHEET;
 
   if (!langKeys.length) {
     finishLoading({
-      status: 'No language paths in placeholders. Add columns whose values start with / (e.g. en, fr).',
+      status: `Could not find language paths in the "${sheetLabel}" sheet. Add columns (e.g. en, fr) whose values start with /.`,
       statusIsWarning: true,
       ...statusOnlyUi,
     });
@@ -835,34 +840,27 @@ async function main() {
   bulkCtx.targets = bulkTargets();
   bulkCtx.pageListForTargets = pageListForTargets;
 
-  show({
-    showContentCard: true,
-    currentLocale: fromLoc || urlSeg,
-    showLangRow: showLangPicker,
-    showOpenAll: langKeys.length > 2,
-    previewAllClick,
-    publishAllClick,
-    openAllClick: () => {
-      const targets = bulkCtx.targets;
-      const others = fromLoc
-        ? targets.filter((to) => to.toLowerCase() !== fromLoc.toLowerCase())
-        : targets;
-      const urls = others.map(urlForLocale);
-      openUrlsInNewTabs(urls);
-    },
-  });
+  const openAllClickHandler = () => {
+    const targets = bulkCtx.targets;
+    const others = fromLoc
+      ? targets.filter((to) => to.toLowerCase() !== fromLoc.toLowerCase())
+      : targets;
+    const urls = others.map(urlForLocale);
+    openUrlsInNewTabs(urls);
+  };
 
   if (langKeys.length === 1) {
     const [only] = langKeys;
     if (urlSeg.toLowerCase() === only.toLowerCase()) {
-      show({
+      finishLoading({
         status: `Already on ${only}. Add another language column to map paths, or open a page in a different locale folder.`,
         showLangRow: false,
+        canOpen: false,
       });
       return;
     }
     const newSeg = [...segments.slice(0, locIndex), only, ...segments.slice(locIndex + 1)];
-    show({
+    finishLoading({
       status: '',
       canOpen: true,
       openUrl: buildDest(parsed, org, repo, newSeg, useBranch, tier, target, daView),
@@ -874,8 +872,10 @@ async function main() {
   }
 
   if (!fromLoc) {
-    show({
+    finishLoading({
       status: `This page’s locale folder is "${urlSeg}" but placeholders only define: ${langKeys.join(', ')}.`,
+      showLangRow: false,
+      canOpen: false,
     });
     return;
   }
@@ -915,7 +915,15 @@ async function main() {
     });
   };
 
-  finishLoading({ status: '' });
+  finishLoading({
+    status: '',
+    currentLocale: fromLoc || urlSeg,
+    showLangRow: showLangPicker,
+    showOpenAll: langKeys.length > 2,
+    openAllClick: openAllClickHandler,
+    canOpen: true,
+    openDisabled: Boolean(showLangPicker),
+  });
 
   if (showLangPicker) {
     initLangCombobox(ui, langKeys, fromLoc, applyDestination);

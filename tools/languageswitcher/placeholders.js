@@ -152,10 +152,22 @@ export async function fetchLanguageSwitcherRows(
     }
   }
 
-  const summary = errors.length ? ` Tried: ${errors.slice(0, 4).join('; ')}${errors.length > 4 ? '…' : ''}` : '';
+  const only404 = errors.length > 0 && errors.every((e) => /HTTP 404\b/.test(e));
+  const missingSheet = errors.some((e) => e.includes('no language-switcher columns'));
+
   /* eslint-enable no-await-in-loop */
+  if (only404) {
+    throw new Error(
+      `Could not find placeholders.json. Publish placeholders.json for this site with a "${sheetName}" sheet.`,
+    );
+  }
+  if (missingSheet) {
+    throw new Error(
+      `Could not find the "${sheetName}" sheet in placeholders.json. Add a "${sheetName}" sheet with locale columns (e.g. en, fr) whose values start with /.`,
+    );
+  }
   throw new Error(
-    `Could not load placeholders.json with "${sheetName}" language columns.${summary}`,
+    `Could not find placeholders.json or the "${sheetName}" sheet. Publish placeholders.json with a "${sheetName}" sheet and locale path columns.`,
   );
 }
 

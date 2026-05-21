@@ -131,10 +131,6 @@ body {
   border-radius: var(--radius-sm);
 }
 
-.ls-panel.ls-minimal .app-main {
-  width: 100%;
-}
-
 .current-locale {
   margin: 0;
   padding: 8px 10px;
@@ -303,6 +299,23 @@ body {
   padding-top: 4px;
 }
 
+.ls-panel.ls-pending .content-card,
+.ls-panel.ls-pending .bulk-footer {
+  display: none;
+}
+
+.ls-panel.ls-pending .app-main {
+  min-height: 240px;
+}
+
+.ls-panel.ls-minimal .app-main {
+  width: 100%;
+}
+
+.ls-panel.ls-minimal.ls-pending .app-main {
+  min-height: 0;
+}
+
 .footer-hint {
   margin: -4px 0 0;
   font-size: 12px;
@@ -443,8 +456,8 @@ body {
 }
 
 .bulk-actions-row .btn-outline:hover:not(:disabled) {
-  color: var(--seagreen);
-  background-color: var(--surface);
+  color: var(--seagreen-text);
+  background-color: var(--seagreen);
   border-color: var(--seagreen);
 }
 

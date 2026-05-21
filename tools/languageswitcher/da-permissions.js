@@ -57,6 +57,11 @@ export function permissionDeniedMessageForPublish() {
   return "You don't have permission to publish. Contact your administrator.";
 }
 
+/** Short text for disabled Publish All button tooltip. */
+export function publishDeniedHoverHint() {
+  return "You don't have permission to publish.";
+}
+
 /**
  * Build da.live/source URL for the current page (adds .html when needed).
  */
