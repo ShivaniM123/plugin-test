@@ -215,6 +215,9 @@ function setUi(ui, actions, opts = {}) {
   }
 }
 
+const LOADING_SPINNER_DELAY_MS = 200;
+let panelLoadingDelayTimer = null;
+
 function setPanelLoading(isLoading) {
   const panel = document.querySelector('.ls-panel');
   const compact = document.querySelector('.ls-loading-compact');
@@ -223,6 +226,27 @@ function setPanelLoading(isLoading) {
   panel.classList.toggle('ls-loading', loading);
   panel.setAttribute('aria-busy', loading ? 'true' : 'false');
   if (compact) compact.setAttribute('aria-busy', loading ? 'true' : 'false');
+}
+
+function clearPanelLoadingDelay() {
+  if (panelLoadingDelayTimer) {
+    clearTimeout(panelLoadingDelayTimer);
+    panelLoadingDelayTimer = null;
+  }
+}
+
+/** Avoid a loading flash when placeholders/permissions resolve quickly (e.g. cache hit). */
+function startPanelLoadingDeferred() {
+  clearPanelLoadingDelay();
+  panelLoadingDelayTimer = setTimeout(() => {
+    panelLoadingDelayTimer = null;
+    setPanelLoading(true);
+  }, LOADING_SPINNER_DELAY_MS);
+}
+
+function finishPanelLoading() {
+  clearPanelLoadingDelay();
+  setPanelLoading(false);
 }
 
 function setPanelTwoLanguagesMode(isTwo) {
@@ -404,7 +428,7 @@ function initLangCombobox(ui, keys, currentKey, onPickLocale) {
   }
 
   setTriggerLabel(null);
-  onPickLocale(first);
+  onPickLocale(null);
 }
 
 function buildDest(parsed, org, repo, newSegments, useBranch, tier, target, daView) {
@@ -701,7 +725,7 @@ async function main() {
   };
 
   const finishLoading = (patch = {}) => {
-    setPanelLoading(false);
+    finishPanelLoading();
     show({
       bulkMessage: '',
       bulkMessageIsLoading: false,
@@ -713,10 +737,11 @@ async function main() {
     });
   };
 
-  setPanelLoading(true);
+  startPanelLoadingDeferred();
   show({
     status: '',
     bulkMessage: '',
+    showContentCard: false,
     showLangRow: false,
     showPreviewAll: false,
     showPublishAll: false,
@@ -784,9 +809,9 @@ async function main() {
 
   const locIndex = findLocaleSegmentIndex(segments, langKeys);
   if (locIndex < 0) {
-    const langs = langKeys.join(', ');
+    const langs = langKeys.map((k) => `/${k}`).join(', ');
     finishLoading({
-      status: `This page is not in a language folder. Open a document under ${langs} to use Language Switcher.`,
+      status: `This page is not inside a language folder. Open a document under ${langs} to use Language Mapper.`,
       statusIsWarning: true,
       ...statusOnlyUi,
     });
@@ -883,6 +908,17 @@ async function main() {
   }
 
   const applyDestination = (toLoc) => {
+    if (!toLoc) {
+      show({
+        status: '',
+        canOpen: true,
+        openUrl: null,
+        openDisabled: true,
+        showLangRow: showLangPicker,
+        openPrimaryLabel: PRIMARY_LABEL_WITH_PICKER,
+      });
+      return;
+    }
     if (toLoc.toLowerCase() === fromLoc.toLowerCase()) {
       show({
         status: '',
