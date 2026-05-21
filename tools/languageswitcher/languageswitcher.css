@@ -91,7 +91,7 @@ body {
   padding: 16px 18px 18px;
   border-radius: var(--radius-md);
   background: var(--surface);
-  border: 1px solid var(--border-quiet);
+  border: 3px solid #000;
   box-shadow: var(--shadow-panel);
 }
 
@@ -109,6 +109,10 @@ body {
   background: var(--surface-raised);
   border: 1px solid var(--border-quiet);
   border-radius: var(--radius-sm);
+}
+
+.status:empty {
+  display: none;
 }
 
 .status.is-warning {
@@ -310,19 +314,11 @@ body {
 .ls-panel.ls-minimal .app-main {
   width: 100%;
   min-height: 0;
-  padding: 16px 18px 18px;
-  background: var(--surface);
-  border: 1px solid var(--border-quiet);
-  box-shadow: var(--shadow-panel);
 }
 
-/* Loading: no empty card — shell stays invisible until finishLoading */
-.ls-panel.ls-pending:not(.ls-minimal) .app-main {
-  min-height: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
+/* Loading: hide shell entirely (no white bar) until content or status is ready */
+.ls-panel.ls-pending .app-main {
+  display: none;
 }
 
 .footer-hint {
