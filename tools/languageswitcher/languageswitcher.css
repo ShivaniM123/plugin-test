@@ -19,7 +19,7 @@
   --success: #12805c;
   --success-soft: rgb(18 128 92 / 12%);
   --seagreen: #82cca2;
-  --seagreen-text: #36a867;
+  --seagreen-text: #045a29;
   --warning: #b45309;
   --warning-soft: rgb(245 158 11 / 18%);
   --warning-border: rgb(217 119 6 / 45%);
@@ -498,7 +498,7 @@ body {
 
 .btn-outline:hover:not(:disabled) {
   color: #fff;
-  background-color: #82cca2;
+  background-color: #045a29;
 }
 
 .bulk-actions-row .btn-outline:hover:not(:disabled) {

@@ -91,6 +91,7 @@ If corresponding localized pages (example: en ↔ fr) do not exist, the plugin d
 3. Preview/Publish Access & Validation Errors: 
 During preview/publish operations, the plugin validates access for every localized page. If any operation fails, corresponding status/error messages are displayed for that specific language page.
 
+![Publish/Preview Access:](error3.png)
 
 ## Points To Note:
 
