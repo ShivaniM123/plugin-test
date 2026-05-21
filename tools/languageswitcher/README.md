@@ -1,12 +1,10 @@
 # Language Switcher
 
-
-A Document Authoring (DA) library plugin that allows to quickly switch between localized versions of a page using **`placeholders.json`**. 
-
+A Document Authoring (DA) **library plugin** that helps authors jump to the same page in other locales and run bulk **preview** / **publish** for every language defined in **`placeholders.json`**.
 
 ## Overview
-
-Language Switcher is for same-page, different-language navigation. It helps authors jump to the equivalent path for the document they are editing.
+Language Switcher is for same-page, different-language navigation. It helps authors jump to the equivalent 
+path for the document they are editing.
 
 ## Features
 
@@ -23,20 +21,24 @@ Language Switcher is for same-page, different-language navigation. It helps auth
     Makes switching languages easy without editing URLs manually.
 
 4. **Open Selected/All Languages**
-  * Selected Langauge Page: Opens the same page in the language chosen by the user.
+  * Selected Language Page: Opens the same page in the language chosen by the user.
     All Language Pages: Opens all available language versions of the current page at once.
 
-5. **Intelligent Fallback Navigation**
-  * If no mapping is found in placeholders.json, the plugin falls back to updating only the locale in the URL while preserving the existing path.
+5. **Preview/Publish All Language Pages**
+  * Allows users to preview/publish all available versions of the current page in a single action.
+  The plugin validates each page and displays corresponding results such as successful preview/publish, 404 page not found, unauthorized access and other errors.
+
+6. **Intelligent Fallback Navigation**
+  If no mapping is found in `placeholders.json`, the plugin falls back to updating only the locale in the URL while preserving the existing page path.
 
 
 ## How to Use
 
-1. Add the plugin under `tools/languageswitcher/` (`languageswitcher.html`, `languageswitcher.js`, `languageswitcher.css`, `placeholders.js`, `locale-url-helper.js`, optional `icons/`).
+1. Add the plugin under `tools/languageswitcher/` (`languageswitcher.html`, `languageswitcher.js`, `languageswitcher.css`, `placeholders.js`, `locale-url-helper.js`, `aem-admin.js`, `da-permissions.js` optional `icons/`).
+
 2. A published **`placeholders.json`** in repo that includes a **`language-switcher`** sheet. Example:
 
 ![Example UI:](placeholders.png)
-
 
 3. Open the page you want to switch from (any supported language) in DA
 4. Open DA Language Switcher from the Library. 
@@ -44,6 +46,7 @@ Language Switcher is for same-page, different-language navigation. It helps auth
   a) Open Page for Selected Language → Opens the equivalent page in the chosen language
   b) Open Page for All Languages → Opens all available localized versions of the current page
 * For 2 languages the plugin directly displays the alternate language option instead of showing a dropdown.
+6. Preview All/ Publish All Language Pages → Triggers preview/publish for all localized pages and displays status/results for each language page.
 
 ## File Overview
 
@@ -53,9 +56,11 @@ tools/languageswitcher/
 ├── languageswitcher.js     # Core logic (UI + navigation handling)
 ├── languageswitcher.css    # Layout and styling
 ├── placeholders.js         # Fetch placeholders.json, Implements the core language resolution logic.
-├── locale-url-helper.js    # Shared utilities (DA / preview URL builders, helpers) 
+├── locale-url-helper.js    # Shared utilities (DA / preview URL builders, helpers)
+├── aem-admin.js            # Page preview/publish + result messages
+├── da-permissions.js       # DA actions read/write checks
 ├── icons/
-│   └── language-icon.svg   # library icon
+│   └── language-icon.svg   # Library icon
 └── README.md               # Documentation
 ```
 
@@ -71,3 +76,5 @@ tools/languageswitcher/
 
 **Placeholder Resolution Priority:**
 When multiple placeholders.json files are available across directory levels, the plugin prioritizes the root-level placeholder configuration.
+
+The plugin supports any number of languages by configuring entries in placeholders.json
