@@ -74,14 +74,16 @@ tools/languageswitcher/
 
 ## Edge Cases Handled
 
-1. Pages Outside Language Folder Structure
+1. Pages Outside Language Folder Structure: 
 The plugin requires the current page to exist inside a supported locale folder structure (example: /en/, /fr/, /de/). If the page is outside any configured language folder, the modal displays an appropriate validation/error message.
 
-2. Missing Corresponding Localized Pages
+![Outside Language Folder:](error1.png)
+
+2. Missing Corresponding Localized Pages: 
 If corresponding localized pages (example: en ↔ fr) do not exist, the plugin detects the missing page during preview/publish validation.
 
 
-3.Preview/Publish Access & Validation Errors
+3. Preview/Publish Access & Validation Errors: 
 During preview/publish operations, the plugin validates access for every localized page. If any operation fails, corresponding status/error messages are displayed for that specific language page.
 
 
