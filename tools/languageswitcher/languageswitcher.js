@@ -263,9 +263,6 @@ function setUi(ui, opts = {}) {
   });
 }
 
-const LOADING_SPINNER_DELAY_MS = 200;
-let panelLoadingDelayTimer = null;
-
 function setPanelLoading(isLoading) {
   const panel = getPanel();
   const compact = document.querySelector('.ls-loading-compact');
@@ -277,24 +274,7 @@ function setPanelLoading(isLoading) {
   if (compact) compact.setAttribute('aria-busy', loading ? 'true' : 'false');
 }
 
-function clearPanelLoadingDelay() {
-  if (panelLoadingDelayTimer) {
-    clearTimeout(panelLoadingDelayTimer);
-    panelLoadingDelayTimer = null;
-  }
-}
-
-/** Avoid a loading flash when placeholders/permissions resolve quickly (e.g. cache hit). */
-function startPanelLoadingDeferred() {
-  clearPanelLoadingDelay();
-  panelLoadingDelayTimer = setTimeout(() => {
-    panelLoadingDelayTimer = null;
-    setPanelLoading(true);
-  }, LOADING_SPINNER_DELAY_MS);
-}
-
 function finishPanelLoading() {
-  clearPanelLoadingDelay();
   setPanelLoading(false);
 }
 
@@ -516,6 +496,7 @@ async function resolveToolAccess(actions, aemFetch, org, repo, sitePath) {
 }
 
 async function main() {
+  setPanelLoading(true);
   const { context, actions, token } = await DA_SDK;
   const ui = getUi();
   const aemFetch = createAemFetcher(actions, token);
@@ -704,7 +685,6 @@ async function main() {
     finishLoading({ status, statusIsWarning: true, ...statusOnlyUi });
   };
 
-  startPanelLoadingDeferred();
   show({
     status: '',
     bulkMessage: '',
