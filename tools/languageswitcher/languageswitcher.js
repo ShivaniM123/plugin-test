@@ -43,6 +43,39 @@ const formatLocaleDisplay = (locale) => {
 
 const openPageInLabel = (locale) => `Open page in ${formatLocaleDisplay(locale)}`;
 
+const trimmed = (value) => String(value ?? '').trim();
+
+const AEM_FALLBACK_ACCESS = {
+  authenticated: true,
+  status: 0,
+  permissions: ['read', 'write'],
+  canRead: true,
+  canWrite: true,
+  canPreview: true,
+  canPublish: true,
+  denied: false,
+  message: '',
+};
+
+const NO_DA_ACCESS = {
+  authenticated: false,
+  status: 0,
+  permissions: [],
+  canRead: false,
+  canWrite: false,
+  canPreview: false,
+  canPublish: false,
+  denied: true,
+  message: '',
+};
+
+let cachedPanel = null;
+
+function getPanel() {
+  if (!cachedPanel) cachedPanel = document.querySelector('.ls-panel');
+  return cachedPanel;
+}
+
 const SETTINGS = {
   tier: 'page',
   branch: 'main',
@@ -111,7 +144,7 @@ function openUrlsInNewTabs(urls) {
 
 function setBulkMessage(ui, text, opts = {}) {
   if (!ui.bulkMessageEl) return;
-  const msg = String(text || '').trim();
+  const msg = trimmed(text);
   const isError = opts.isError === true;
   const isLoading = opts.isLoading === true;
   const isSuccess = opts.isSuccess === true;
@@ -139,7 +172,15 @@ function setCurrentLocale(ui, locale) {
   if (ui.currentLocaleValue) ui.currentLocaleValue.textContent = formatLocaleDisplay(loc);
 }
 
-function setUi(ui, actions, opts = {}) {
+function wireBulkBtn(btn, { hidden, disabled, title, onClick }) {
+  if (!btn) return;
+  btn.hidden = hidden;
+  btn.disabled = disabled;
+  btn.title = title;
+  btn.onclick = onClick;
+}
+
+function setUi(ui, opts = {}) {
   const {
     status = '',
     statusIsWarning = false,
@@ -165,16 +206,18 @@ function setUi(ui, actions, opts = {}) {
     hasAemFetch = false,
   } = opts;
 
+  const statusText = trimmed(status);
+  const statusVisible = Boolean(statusText);
   ui.statusEl.textContent = status;
-  ui.statusEl.hidden = !String(status || '').trim();
-  ui.statusEl.classList.toggle('is-warning', Boolean(String(status || '').trim() && statusIsWarning));
+  ui.statusEl.hidden = !statusVisible;
+  ui.statusEl.classList.toggle('is-warning', statusVisible && statusIsWarning);
   if (ui.contentCardEl) ui.contentCardEl.hidden = !showContentCard;
-  const panel = document.querySelector('.ls-panel');
-  const statusVisible = Boolean(String(status || '').trim());
+  const panel = getPanel();
+  const panelLoading = panel?.classList.contains('ls-loading');
   if (panel) {
     const statusOnly = statusVisible && !showContentCard;
     panel.classList.toggle('ls-minimal', statusOnly);
-    panel.classList.toggle('ls-pending', !showContentCard && !statusVisible);
+    panel.classList.toggle('ls-pending', !showContentCard && !statusVisible && !panelLoading);
   }
   ui.langRow.hidden = !showLangRow;
   setCurrentLocale(ui, currentLocale);
@@ -185,7 +228,8 @@ function setUi(ui, actions, opts = {}) {
   });
 
   if (ui.bulkFooter) {
-    ui.bulkFooter.hidden = !showContentCard
+    ui.bulkFooter.hidden = panelLoading
+      || !showContentCard
       || (!showPreviewAll && !showPublishAll && !bulkMessage);
   }
 
@@ -205,31 +249,57 @@ function setUi(ui, actions, opts = {}) {
   const previewAllowed = !bulkDisabled && hasAemFetch && Boolean(toolAccess?.canPreview);
   const publishAllowed = !bulkDisabled && hasAemFetch && Boolean(toolAccess?.canPublish);
 
-  if (ui.previewAllBtn) {
-    ui.previewAllBtn.hidden = !showPreviewAll;
-    ui.previewAllBtn.disabled = !previewAllowed;
-    ui.previewAllBtn.title = previewAllowed
-      ? ''
-      : permissionDeniedMessageForPreview();
-    ui.previewAllBtn.onclick = previewAllowed && typeof previewAllClick === 'function'
-      ? previewAllClick
-      : null;
-  }
+  wireBulkBtn(ui.previewAllBtn, {
+    hidden: !showPreviewAll,
+    disabled: !previewAllowed,
+    title: previewAllowed ? '' : permissionDeniedMessageForPreview(),
+    onClick: previewAllowed && typeof previewAllClick === 'function' ? previewAllClick : null,
+  });
+  wireBulkBtn(ui.publishAllBtn, {
+    hidden: !showPublishAll,
+    disabled: !publishAllowed,
+    title: publishAllowed ? '' : publishDeniedHoverHint(),
+    onClick: publishAllowed && typeof publishAllClick === 'function' ? publishAllClick : null,
+  });
+}
 
-  if (ui.publishAllBtn) {
-    ui.publishAllBtn.hidden = !showPublishAll;
-    ui.publishAllBtn.disabled = !publishAllowed;
-    ui.publishAllBtn.title = publishAllowed
-      ? ''
-      : publishDeniedHoverHint();
-    ui.publishAllBtn.onclick = publishAllowed && typeof publishAllClick === 'function'
-      ? publishAllClick
-      : null;
+const LOADING_SPINNER_DELAY_MS = 200;
+let panelLoadingDelayTimer = null;
+
+function setPanelLoading(isLoading) {
+  const panel = getPanel();
+  const compact = document.querySelector('.ls-loading-compact');
+  if (!panel) return;
+  const loading = Boolean(isLoading);
+  panel.classList.toggle('ls-loading', loading);
+  if (loading) panel.classList.remove('ls-pending');
+  panel.setAttribute('aria-busy', loading ? 'true' : 'false');
+  if (compact) compact.setAttribute('aria-busy', loading ? 'true' : 'false');
+}
+
+function clearPanelLoadingDelay() {
+  if (panelLoadingDelayTimer) {
+    clearTimeout(panelLoadingDelayTimer);
+    panelLoadingDelayTimer = null;
   }
 }
 
+/** Avoid a loading flash when placeholders/permissions resolve quickly (e.g. cache hit). */
+function startPanelLoadingDeferred() {
+  clearPanelLoadingDelay();
+  panelLoadingDelayTimer = setTimeout(() => {
+    panelLoadingDelayTimer = null;
+    setPanelLoading(true);
+  }, LOADING_SPINNER_DELAY_MS);
+}
+
+function finishPanelLoading() {
+  clearPanelLoadingDelay();
+  setPanelLoading(false);
+}
+
 function setPanelTwoLanguagesMode(isTwo) {
-  document.querySelector('.ls-panel')?.classList.toggle('ls-panel-two-languages', Boolean(isTwo));
+  getPanel()?.classList.toggle('ls-panel-two-languages', Boolean(isTwo));
 }
 
 function canonLocale(segment, keys) {
@@ -260,11 +330,8 @@ async function loadPlaceholderRows(org, repo, branch, tier, sheetName, ttlMs, ac
 }
 
 function findLocaleSegmentIndex(segments, langKeys) {
-  const set = new Set(langKeys.map((k) => k.toLowerCase()));
-  for (let i = 0; i < segments.length; i += 1) {
-    if (set.has(segments[i].toLowerCase())) return i;
-  }
-  return -1;
+  const locales = new Set(langKeys.map((k) => k.toLowerCase()));
+  return segments.findIndex((seg) => locales.has(seg.toLowerCase()));
 }
 
 function mergeResolvedSegments(locIndex, segments, resolvedPath) {
@@ -444,30 +511,8 @@ async function resolveToolAccess(actions, aemFetch, org, repo, sitePath) {
   if (typeof actions?.daFetch === 'function') {
     return checkDaContentAccess(actions.daFetch, org, repo, sitePath);
   }
-  if (aemFetch) {
-    return {
-      authenticated: true,
-      status: 0,
-      permissions: ['read', 'write'],
-      canRead: true,
-      canWrite: true,
-      canPreview: true,
-      canPublish: true,
-      denied: false,
-      message: '',
-    };
-  }
-  return {
-    authenticated: false,
-    status: 0,
-    permissions: [],
-    canRead: false,
-    canWrite: false,
-    canPreview: false,
-    canPublish: false,
-    denied: true,
-    message: '',
-  };
+  if (aemFetch) return AEM_FALLBACK_ACCESS;
+  return NO_DA_ACCESS;
 }
 
 async function main() {
@@ -483,7 +528,7 @@ async function main() {
   });
 
   if (!pageUrl) {
-    setUi(ui, actions, {
+    setUi(ui, {
       status: 'Missing page context (org, repo, path). Open this tool from the Library while a document page is open.',
     });
     return;
@@ -522,11 +567,11 @@ async function main() {
   };
 
   const rememberPreviewResults = (results) => {
-    bulkCtx.lastPreviewByLocale = {};
-    results.forEach((p) => {
-      const key = String(p.locale || '').trim().toLowerCase();
-      if (key) bulkCtx.lastPreviewByLocale[key] = p;
-    });
+    bulkCtx.lastPreviewByLocale = Object.fromEntries(
+      results
+        .map((p) => [trimmed(p.locale).toLowerCase(), p])
+        .filter(([key]) => key),
+    );
   };
 
   const resetBulkMessageFlags = () => ({
@@ -541,9 +586,9 @@ async function main() {
       bulkMessageDismissTimer = null;
     }
     uiState = { ...uiState, ...patch };
-    setUi(ui, actions, uiState);
+    setUi(ui, uiState);
 
-    const msg = String(uiState.bulkMessage || '').trim();
+    const msg = trimmed(uiState.bulkMessage);
     if (msg && !uiState.bulkMessageIsLoading && uiState.bulkMessageIsSuccess) {
       bulkMessageDismissTimer = window.setTimeout(() => {
         bulkMessageDismissTimer = null;
@@ -557,151 +602,8 @@ async function main() {
     }
   };
 
-  show({
-    showContentCard: false,
-    showLangRow: false,
-    showPreviewAll: false,
-    showPublishAll: false,
-  });
-
-  const previewAllClick = async () => {
-    if (!bulkCtx.ready) {
-      show({
-        bulkMessage: 'Still loading…',
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-      return;
-    }
-    const { toolAccess } = bulkCtx;
-    if (!aemFetch) {
-      show({
-        bulkMessage: permissionDeniedMessage('preview'),
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-      return;
-    }
-    if (!toolAccess?.canRead) {
-      show({
-        bulkMessage: permissionDeniedMessageForAccess(),
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-      return;
-    }
-    if (!toolAccess?.canPreview) {
-      show({
-        bulkMessage: permissionDeniedMessageForPreview(),
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-      return;
-    }
-    const targets = bulkCtx.targets;
-    if (!targets.length) {
-      show({
-        bulkMessage: 'No languages to preview.',
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-      return;
-    }
-    show({
-      bulkMessage: 'Previewing…',
-      ...resetBulkMessageFlags(),
-      bulkMessageIsLoading: true,
-    });
-    try {
-      const result = await previewPages(bulkCtx.pageListForTargets(targets), aemFetch);
-      rememberPreviewResults(result);
-      const ok = result.every((p) => p.status === 200);
-      show({
-        bulkMessage: summarizeBulkResult(result, 'previewed', 'preview'),
-        ...resetBulkMessageFlags(),
-        bulkMessageIsSuccess: ok,
-        bulkMessageIsError: !ok,
-      });
-    } catch (e) {
-      show({
-        bulkMessage: `Preview failed: ${e.message || String(e)}`,
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-    }
-  };
-
-  const publishAllClick = async () => {
-    if (!bulkCtx.ready) {
-      show({
-        bulkMessage: 'Still loading…',
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-      return;
-    }
-    const { toolAccess } = bulkCtx;
-    if (!aemFetch) {
-      show({
-        bulkMessage: permissionDeniedMessage('publish'),
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-      return;
-    }
-    if (!toolAccess?.canRead) {
-      show({
-        bulkMessage: permissionDeniedMessageForAccess(),
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-      return;
-    }
-    if (!toolAccess?.canPublish) {
-      show({
-        bulkMessage: permissionDeniedMessageForPublish(),
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-      return;
-    }
-    const targets = bulkCtx.targets;
-    if (!targets.length) {
-      show({
-        bulkMessage: 'No languages to publish.',
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-      return;
-    }
-    show({
-      bulkMessage: 'Publishing…',
-      ...resetBulkMessageFlags(),
-      bulkMessageIsLoading: true,
-    });
-    try {
-      const published = await publishPages(bulkCtx.pageListForTargets(targets), aemFetch);
-      rememberPreviewResults(
-        published.map((p) => ({
-          locale: p.locale,
-          status: p.previewStatus ?? p.status,
-          error: p.error,
-        })),
-      );
-      const ok = published.length > 0 && published.every((p) => p.status === 200);
-      show({
-        bulkMessage: summarizeBulkResult(published, 'published', 'publish'),
-        ...resetBulkMessageFlags(),
-        bulkMessageIsSuccess: ok,
-        bulkMessageIsError: !ok,
-      });
-    } catch (e) {
-      show({
-        bulkMessage: `Publish failed: ${e.message || String(e)}`,
-        ...resetBulkMessageFlags(),
-        bulkMessageIsError: true,
-      });
-    }
+  const showBulkError = (bulkMessage) => {
+    show({ bulkMessage, ...resetBulkMessageFlags(), bulkMessageIsError: true });
   };
 
   const statusOnlyUi = {
@@ -710,6 +612,71 @@ async function main() {
     showPreviewAll: false,
     showPublishAll: false,
   };
+
+  const bulkPreconditionError = (toolAccess, action) => {
+    if (!bulkCtx.ready) return 'Still loading…';
+    if (!aemFetch) return permissionDeniedMessage(action);
+    if (!toolAccess?.canRead) return permissionDeniedMessageForAccess();
+    if (action === 'preview' && !toolAccess?.canPreview) return permissionDeniedMessageForPreview();
+    if (action === 'publish' && !toolAccess?.canPublish) return permissionDeniedMessageForPublish();
+    if (!bulkCtx.targets.length) {
+      return action === 'preview' ? 'No languages to preview.' : 'No languages to publish.';
+    }
+    return null;
+  };
+
+  const runBulkAction = async ({
+    action,
+    loadingMessage,
+    failLabel,
+    summarizeLabel,
+    run,
+    mapResults,
+  }) => {
+    const err = bulkPreconditionError(bulkCtx.toolAccess, action);
+    if (err) {
+      showBulkError(err);
+      return;
+    }
+    show({ bulkMessage: loadingMessage, ...resetBulkMessageFlags(), bulkMessageIsLoading: true });
+    try {
+      const result = await run(bulkCtx.targets);
+      if (mapResults) rememberPreviewResults(mapResults(result));
+      const ok = action === 'publish'
+        ? result.length > 0 && result.every((p) => p.status === 200)
+        : result.every((p) => p.status === 200);
+      show({
+        bulkMessage: summarizeBulkResult(result, summarizeLabel, action),
+        ...resetBulkMessageFlags(),
+        bulkMessageIsSuccess: ok,
+        bulkMessageIsError: !ok,
+      });
+    } catch (e) {
+      showBulkError(`${failLabel} failed: ${e.message || String(e)}`);
+    }
+  };
+
+  const previewAllClick = () => runBulkAction({
+    action: 'preview',
+    loadingMessage: 'Previewing…',
+    failLabel: 'Preview',
+    summarizeLabel: 'previewed',
+    run: (targets) => previewPages(bulkCtx.pageListForTargets(targets), aemFetch),
+    mapResults: (result) => result,
+  });
+
+  const publishAllClick = () => runBulkAction({
+    action: 'publish',
+    loadingMessage: 'Publishing…',
+    failLabel: 'Publish',
+    summarizeLabel: 'published',
+    run: (targets) => publishPages(bulkCtx.pageListForTargets(targets), aemFetch),
+    mapResults: (published) => published.map((p) => ({
+      locale: p.locale,
+      status: p.previewStatus ?? p.status,
+      error: p.error,
+    })),
+  });
 
   const readyUi = (toolAccess) => ({
     showContentCard: true,
@@ -723,6 +690,7 @@ async function main() {
   });
 
   const finishLoading = (patch = {}) => {
+    finishPanelLoading();
     const access = patch.toolAccess ?? bulkCtx.toolAccess;
     show({
       bulkMessage: '',
@@ -732,13 +700,26 @@ async function main() {
     });
   };
 
+  const finishWithWarning = (status) => {
+    finishLoading({ status, statusIsWarning: true, ...statusOnlyUi });
+  };
+
+  startPanelLoadingDeferred();
+  show({
+    status: '',
+    bulkMessage: '',
+    showContentCard: false,
+    showLangRow: false,
+    showPreviewAll: false,
+    showPublishAll: false,
+    ...resetBulkMessageFlags(),
+  });
+
   const parsed = parseCurrentPage(pageUrl);
   if (!parsed) {
-    finishLoading({
-      status: 'Could not read this page path. Open Language Switcher from a document under org/repo/locale/…',
-      statusIsWarning: true,
-      ...statusOnlyUi,
-    });
+    finishWithWarning(
+      'Could not read this page path. Open Language Switcher from a document under org/repo/locale/…',
+    );
     return;
   }
 
@@ -747,11 +728,9 @@ async function main() {
   const segments = [...parsed.segments];
 
   if (!segments.length) {
-    finishLoading({
-      status: 'This path has no locale folder after org/repo. Open a page such as /en/… or /fr/…',
-      statusIsWarning: true,
-      ...statusOnlyUi,
-    });
+    finishWithWarning(
+      'This path has no locale folder after org/repo. Open a page such as /en/… or /fr/…',
+    );
     return;
   }
 
@@ -771,11 +750,7 @@ async function main() {
       sitePath,
     );
   } catch (e) {
-    finishLoading({
-      status: String(e?.message || e || 'Could not find placeholders.json.'),
-      statusIsWarning: true,
-      ...statusOnlyUi,
-    });
+    finishWithWarning(String(e?.message || e || 'Could not find placeholders.json.'));
     return;
   }
 
@@ -784,22 +759,17 @@ async function main() {
   const sheetLabel = placeholderSheetName || DEFAULT_SHEET;
 
   if (!langKeys.length) {
-    finishLoading({
-      status: `Could not find language paths in the "${sheetLabel}" sheet. Add columns (e.g. en, fr) whose values start with /.`,
-      statusIsWarning: true,
-      ...statusOnlyUi,
-    });
+    finishWithWarning(
+      `Could not find language paths in the "${sheetLabel}" sheet. Add columns (e.g. en, fr) whose values start with /.`,
+    );
     return;
   }
 
   const locIndex = findLocaleSegmentIndex(segments, langKeys);
   if (locIndex < 0) {
-    const langs = langKeys.map((k) => `/${k}`).join(', ');
-    finishLoading({
-      status: `This page is not inside a language folder. Open a document under ${langs} to use Language Mapper.`,
-      statusIsWarning: true,
-      ...statusOnlyUi,
-    });
+    finishWithWarning(
+      `This page is not inside a language folder. Open a document under ${langKeys.map((k) => `/${k}`).join(', ')} to use Language Mapper.`,
+    );
     return;
   }
 
@@ -813,9 +783,7 @@ async function main() {
   const pathCache = new Map();
   const getResolvedPath = (toLoc) => {
     const k = toLoc.toLowerCase();
-    if (!pathCache.has(k)) {
-      pathCache.set(k, resolvePathWithFallback(rows, fromLoc, toLoc, afterLoc));
-    }
+    if (!pathCache.has(k)) pathCache.set(k, resolvePathWithFallback(rows, fromLoc, toLoc, afterLoc));
     return pathCache.get(k);
   };
 
@@ -836,8 +804,6 @@ async function main() {
     getResolvedPath(toLoc),
   );
 
-  const bulkTargets = () => langKeys;
-
   const pageListForTargets = (targets) => targets.map((loc) => ({
     locale: loc,
     path: buildAemAdminPath(org, repo, segmentsForLocale(loc)),
@@ -845,7 +811,7 @@ async function main() {
 
   bulkCtx.ready = true;
   bulkCtx.toolAccess = toolAccess;
-  bulkCtx.targets = bulkTargets();
+  bulkCtx.targets = langKeys;
   bulkCtx.pageListForTargets = pageListForTargets;
 
   const openAllClickHandler = () => {
@@ -888,38 +854,26 @@ async function main() {
     return;
   }
 
-  const applyDestination = (toLoc) => {
-    if (!toLoc) {
-      show({
-        status: '',
-        canOpen: true,
-        openUrl: null,
-        openDisabled: true,
-        showLangRow: showLangPicker,
-        openPrimaryLabel: PRIMARY_LABEL_WITH_PICKER,
-      });
-      return;
-    }
-    if (toLoc.toLowerCase() === fromLoc.toLowerCase()) {
-      show({
-        status: '',
-        canOpen: true,
-        openUrl: null,
-        openDisabled: true,
-        showLangRow: showLangPicker,
-        openPrimaryLabel: PRIMARY_LABEL_WITH_PICKER,
-      });
-      return;
-    }
+  const showOpenState = ({ openUrl, openDisabled, openPrimaryLabel }) => {
     show({
       status: '',
       canOpen: true,
+      openUrl,
+      openDisabled,
+      showLangRow: showLangPicker,
+      openPrimaryLabel: openPrimaryLabel ?? PRIMARY_LABEL_WITH_PICKER,
+    });
+  };
+
+  const applyDestination = (toLoc) => {
+    if (!toLoc || toLoc.toLowerCase() === fromLoc.toLowerCase()) {
+      showOpenState({ openUrl: null, openDisabled: true });
+      return;
+    }
+    showOpenState({
       openUrl: urlForLocale(toLoc),
       openDisabled: false,
-      showLangRow: showLangPicker,
-      openPrimaryLabel: showLangPicker
-        ? PRIMARY_LABEL_WITH_PICKER
-        : openPageInLabel(toLoc),
+      openPrimaryLabel: showLangPicker ? PRIMARY_LABEL_WITH_PICKER : openPageInLabel(toLoc),
     });
   };
 
@@ -942,9 +896,12 @@ async function main() {
 
 main().catch((err) => {
   console.error(err);
+  finishPanelLoading();
+  getPanel()?.classList.remove('ls-pending');
   const el = document.getElementById('status');
   if (el) {
     el.textContent = `Error: ${err.message || String(err)}`;
     el.hidden = false;
+    el.classList.add('is-warning');
   }
 });

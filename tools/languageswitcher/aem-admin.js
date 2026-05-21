@@ -241,7 +241,7 @@ function formatPageNotFoundPhrase(localeCount) {
   return `${pluralWord(localeCount, 'page')} not found`;
 }
 
-function formatPublishFailureDetailLine(detail, localeCount) {
+function formatBulkFailureDetailLine(detail, localeCount) {
   const reason = formatFriendlyReason(detail);
   if (reason === 'page not found') {
     return `Error: ${formatPageNotFoundPhrase(localeCount)}.`;
@@ -252,48 +252,37 @@ function formatPublishFailureDetailLine(detail, localeCount) {
   return `Error: ${reason}.`;
 }
 
-function formatPreviewFailureDetailLine(detail, localeCount) {
-  const reason = formatFriendlyReason(detail);
-  if (reason === 'page not found') {
-    return `Error: ${formatPageNotFoundPhrase(localeCount)}.`;
-  }
-  if (reason === 'not authorized') {
-    return `Error: ${pluralWord(localeCount, 'page')} not authorized.`;
-  }
-  return `Error: ${reason}.`;
+function formatBulkFailureLines(pages, introForLocales, groupOpts = {}) {
+  const lines = [];
+  [...groupPagesByError(pages, groupOpts).entries()].forEach(([detail, langs]) => {
+    const locales = formatLocaleBraceList(langs);
+    const langLabel = pluralWord(langs.length, 'language');
+    lines.push(introForLocales(locales, langLabel));
+    lines.push(formatBulkFailureDetailLine(detail, langs.length));
+  });
+  return lines;
 }
 
 function formatPreviewFailedLines(pages) {
-  const lines = [];
-  [...groupPagesByError(pages).entries()].forEach(([detail, langs]) => {
-    const locales = formatLocaleBraceList(langs);
-    const langLabel = pluralWord(langs.length, 'language');
-    lines.push(`Could not preview for ${locales} ${langLabel}`);
-    lines.push(formatPreviewFailureDetailLine(detail, langs.length));
-  });
-  return lines;
+  return formatBulkFailureLines(
+    pages,
+    (locales, langLabel) => `Could not preview for ${locales} ${langLabel}`,
+  );
 }
 
 function formatPublishSkippedLines(pages) {
-  const lines = [];
-  [...groupPagesByError(pages, { usePreviewStatus: true }).entries()].forEach(([detail, langs]) => {
-    const locales = formatLocaleBraceList(langs);
-    const langLabel = pluralWord(langs.length, 'language');
-    lines.push(`Publish skipped for ${locales} ${langLabel}`);
-    lines.push(formatPublishFailureDetailLine(detail, langs.length));
-  });
-  return lines;
+  return formatBulkFailureLines(
+    pages,
+    (locales, langLabel) => `Publish skipped for ${locales} ${langLabel}`,
+    { usePreviewStatus: true },
+  );
 }
 
 function formatPublishFailedLines(pages) {
-  const lines = [];
-  [...groupPagesByError(pages).entries()].forEach(([detail, langs]) => {
-    const locales = formatLocaleBraceList(langs);
-    const langLabel = pluralWord(langs.length, 'language');
-    lines.push(`Could not publish for ${locales} ${langLabel}`);
-    lines.push(formatPublishFailureDetailLine(detail, langs.length));
-  });
-  return lines;
+  return formatBulkFailureLines(
+    pages,
+    (locales, langLabel) => `Could not publish for ${locales} ${langLabel}`,
+  );
 }
 
 function isPreviewFailure(page) {

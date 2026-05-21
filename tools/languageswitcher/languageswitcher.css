@@ -126,6 +126,47 @@ body {
   font-weight: 600;
 }
 
+.ls-loading-compact {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-size: var(--ls-feedback-font-size);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--accent);
+}
+
+.ls-loading-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentcolor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: ls-spin 0.7s linear infinite;
+}
+
+.ls-panel.ls-loading .app-main {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: auto;
+  min-height: 0;
+  padding: 10px 16px;
+  border-width: 3px;
+}
+
+.ls-panel.ls-loading .ls-loading-compact {
+  display: flex;
+}
+
 .content-card {
   display: flex;
   flex-direction: column;
@@ -316,8 +357,8 @@ body {
   min-height: 0;
 }
 
-/* Loading: hide shell entirely (no white bar) until content or status is ready */
-.ls-panel.ls-pending .app-main {
+/* Before spinner: hide empty shell (no white bar) */
+.ls-panel.ls-pending:not(.ls-loading) .app-main {
   display: none;
 }
 
@@ -466,6 +507,14 @@ body {
   border-color: var(--seagreen);
 }
 
+/* Panel loading — after component layout rules */
+.ls-panel.ls-loading .status,
+.ls-panel.ls-loading .content-card,
+.ls-panel.ls-loading .bulk-footer,
+.ls-panel.ls-loading .bulk-actions-row {
+  display: none;
+}
+
 /* [hidden] — last so attribute selectors override flex/display on components */
 .ls-panel .status[hidden],
 .ls-panel .content-card[hidden],
@@ -490,7 +539,8 @@ body {
     transform: none;
   }
 
-  .bulk-message.is-loading::before {
+  .bulk-message.is-loading::before,
+  .ls-loading-spinner {
     animation: none;
   }
 }
